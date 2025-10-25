@@ -1,0 +1,236 @@
+# Python Documentation Init - Python package configuration
+# Generated from binary-delivery-via-python-cli-template
+
+[project]
+name = "python_docs_init"
+description = "Automated documentation setup tool for Python projects using MkDocs and GitLab Pages"
+readme = "README.md"
+dynamic = ["version"]
+authors = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
+maintainers = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
+license = { text = "Unlicense" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+
+    "License :: Public Domain",
+
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+
+
+    "Topic :: System :: Hardware",
+]
+keywords = ['mkdocs', 'documentation', 'gitlab-pages', 'automation']
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "typer>=0.19.2",
+    "python-dotenv>=1.1.1",
+
+
+    "pydantic>=2.12.2",
+
+
+]
+
+[project.scripts]
+python_docs_init = "python_docs_init.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.3.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.14.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-xdist>=3.5.0",
+    "pyright>=1.1.345",
+    "mypy>=1.15.0",
+    "ruff>=0.13.3",
+    "hatchling>=1.14.0",
+    "hatch-vcs>=0.5.0",
+    "python-semantic-release>=9.0.0",
+]
+
+[project.urls]
+Homepage = "https://sourcery.assaabloy.net/"
+Documentation = "https://sourcery.assaabloy.net//-/blob/main/README.md"
+Repository = "https://sourcery.assaabloy.net/"
+"Bug Tracker" = "https://sourcery.assaabloy.net//-/issues"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+    "tiktoken>=0.12.0",
+]
+
+
+
+[tool.hatch.build.targets.wheel]
+include = ["packages/python_docs_init"]
+
+[tool.hatch.build.targets.wheel.sources]
+"packages/python_docs_init" = "python_docs_init"
+
+[tool.hatch.version]
+source = "vcs"
+
+
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+fix = true
+preview = true
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+line-ending = "lf"
+skip-magic-trailing-comma = true
+preview = true
+
+[tool.ruff.lint]
+extend-select = [
+    "E",
+    "W",  # pycodestyle
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+    "YTT", # flake8-2020
+    "S",  # flake8-bandit
+    "B",  # flake8-bugbear
+    "A",  # flake8-builtins
+    "C4", # flake8-comprehensions
+    "T10", # flake8-debugger
+    "SIM", # flake8-simplify
+    "C90", # mccabe
+    "PGH", # pygrep-hooks
+    "RUF", # ruff
+    "TRY", # tryceratops
+    "DOC", # pydocstyle
+    "D",   # pydocstyle
+]
+
+ignore = [
+    "COM812", # Missing trailing comma
+    "COM819", # Missing trailing comma
+    "D107",   # Missing docstring in __init__
+    "D415",   # First line should end with a period
+    "E111",   # Indentation is not a multiple of four
+    "E117",   # Over-indented for visual indent
+    "E203",   # whitespace before ':'
+    "E402",   # module level import not at top of file
+    "E501",   # Line length exceeds maximum limit
+    "ISC001", # isort configuration is missing
+    "ISC002", # isort configuration is missing
+    "Q000",   # Remove bad quotes
+    "Q001",   # Remove bad quotes
+    "Q002",   # Remove bad quotes
+    "Q003",   # Remove bad quotes
+
+    "TRY003", # Exception message should not be too long
+    "DOC501", # Missing raises section
+]
+
+unfixable = ["F401", "DOC501"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+split-on-trailing-comma = false
+force-single-line = false
+force-wrap-aliases = false
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["S101", "S603", "S607", "D102", "D200", "D100"]
+"**/test_*.py" = ["S101", "S603", "S607", "D102", "D200", "D100"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+extra_checks = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+show_error_codes = true
+pretty = true
+disable_error_code = "call-arg,arg-type"
+mypy_path = []
+
+[tool.pyright]
+pythonVersion = "3.11"
+reportMissingTypeStubs = false
+include = ["packages/python_docs_init/"]
+extraPaths = ["packages/python_docs_init", "."]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=packages/python_docs_init",
+    "--cov-report=term-missing",
+    "-v",
+]
+testpaths = ["packages/python_docs_init/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = [".", "packages/"]
+markers = [
+
+    "slow: tests that take significant time to run",
+    "integration: integration tests",
+]
+
+[tool.coverage.run]
+omit = []
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+
+[tool.semantic_release]
+version_toml = []
+major_on_zero = true
+allow_zero_version = true
+tag_format = "v{version}"
+build_command = "uv build"
+
+[tool.semantic_release.branches.main]
+match = "(main|master)"
+prerelease = false
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "style",
+    "refactor",
+    "test",
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "refactor"]

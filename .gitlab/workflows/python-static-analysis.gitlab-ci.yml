@@ -1,0 +1,52 @@
+# Python static analysis jobs for Python Documentation Init
+
+# Ruff linting
+lint:ruff:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+  before_script:
+    - uv sync --all-extras --dev
+  script:
+    - uv run ruff check --output-format=gitlab . | tee ruff-report.json
+  artifacts:
+    when: always
+    reports:
+      codequality: ruff-report.json
+    expire_in: 30 days
+  allow_failure: false
+
+# Mypy type checking
+lint:mypy:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+  before_script:
+    - uv sync --all-extras --dev
+  script:
+    - uv run mypy packages/python_docs_init
+  allow_failure: true
+
+# Pyright type checking
+lint:pyright:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+  before_script:
+    - uv sync --all-extras --dev
+  script:
+    - uv run pyright packages/python_docs_init
+  allow_failure: true
+
+# Bandit security linting
+lint:bandit:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+  before_script:
+    - uv sync --all-extras --dev
+  script:
+    - uv run bandit -r packages/python_docs_init -f json -o bandit-report.json || true
+    - uv run bandit -r packages/python_docs_init
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.json
+    expire_in: 30 days
+  allow_failure: true

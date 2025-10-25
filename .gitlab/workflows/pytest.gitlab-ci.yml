@@ -1,0 +1,32 @@
+# pytest test suite configuration for Python Documentation Init
+
+# Test job with coverage reporting
+test:python:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python$PYTHON_VERSION-bookworm-slim
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.11"]
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    # Sync dependencies and install project
+    - uv sync --all-extras --dev
+  script:
+    # Run tests with coverage
+    - uv run pytest
+        --junitxml=report.xml
+        --cov-report=xml:coverage.xml
+        --cov-report=term
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - report.xml
+      - coverage.xml
+    expire_in: 30 days
