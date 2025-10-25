@@ -1,38 +1,42 @@
-# Python Documentation Init - Python package configuration
-# Generated from binary-delivery-via-python-cli-template
-
 [project]
 name = "python_docs_init"
 description = "Automated documentation setup tool for Python projects using MkDocs and GitLab Pages"
 readme = "README.md"
-dynamic = ["version"]
-authors = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
-maintainers = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
-license = { text = "Unlicense" }
+dynamic = [
+    "version",
+]
+authors = [
+    { name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" },
+]
+maintainers = [
+    { name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" },
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-
     "License :: Public Domain",
-
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-
-
     "Topic :: System :: Hardware",
 ]
-keywords = ['mkdocs', 'documentation', 'gitlab-pages', 'automation']
+keywords = [
+    "mkdocs",
+    "documentation",
+    "gitlab-pages",
+    "automation",
+]
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "typer>=0.19.2",
     "python-dotenv>=1.1.1",
-
-
     "pydantic>=2.12.2",
-
-
+    "jinja2>=3.1.6",
+    "tomli-w>=1.2.0",
 ]
+
+[project.license]
+text = "Unlicense"
 
 [project.scripts]
 python_docs_init = "python_docs_init.cli:app"
@@ -53,6 +57,16 @@ dev = [
     "hatch-vcs>=0.5.0",
     "python-semantic-release>=9.0.0",
 ]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocs-typer2",
+    "mkdocstrings[python]",
+    "mkdocs-mermaid2-plugin",
+    "termynal",
+    "mkdocs-recently-updated-docs",
+    "mkdocs-mcp",
+]
 
 [project.urls]
 Homepage = "https://sourcery.assaabloy.net/"
@@ -61,10 +75,11 @@ Repository = "https://sourcery.assaabloy.net/"
 "Bug Tracker" = "https://sourcery.assaabloy.net//-/issues"
 
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = [
+    "hatchling",
+    "hatch-vcs",
+]
 build-backend = "hatchling.build"
-
-
 
 [dependency-groups]
 dev = [
@@ -72,18 +87,16 @@ dev = [
     "tiktoken>=0.12.0",
 ]
 
-
-
 [tool.hatch.build.targets.wheel]
-include = ["packages/python_docs_init"]
+include = [
+    "packages/python_docs_init",
+]
 
 [tool.hatch.build.targets.wheel.sources]
 "packages/python_docs_init" = "python_docs_init"
 
 [tool.hatch.version]
 source = "vcs"
-
-
 
 [tool.ruff]
 target-version = "py311"
@@ -101,47 +114,51 @@ preview = true
 [tool.ruff.lint]
 extend-select = [
     "E",
-    "W",  # pycodestyle
-    "F",  # pyflakes
-    "I",  # isort
-    "UP", # pyupgrade
-    "YTT", # flake8-2020
-    "S",  # flake8-bandit
-    "B",  # flake8-bugbear
-    "A",  # flake8-builtins
-    "C4", # flake8-comprehensions
-    "T10", # flake8-debugger
-    "SIM", # flake8-simplify
-    "C90", # mccabe
-    "PGH", # pygrep-hooks
-    "RUF", # ruff
-    "TRY", # tryceratops
-    "DOC", # pydocstyle
-    "D",   # pydocstyle
+    "W",
+    "F",
+    "I",
+    "UP",
+    "YTT",
+    "S",
+    "B",
+    "A",
+    "C4",
+    "T10",
+    "SIM",
+    "C90",
+    "PGH",
+    "RUF",
+    "TRY",
+    "DOC",
+    "D",
 ]
-
 ignore = [
-    "COM812", # Missing trailing comma
-    "COM819", # Missing trailing comma
-    "D107",   # Missing docstring in __init__
-    "D415",   # First line should end with a period
-    "E111",   # Indentation is not a multiple of four
-    "E117",   # Over-indented for visual indent
-    "E203",   # whitespace before ':'
-    "E402",   # module level import not at top of file
-    "E501",   # Line length exceeds maximum limit
-    "ISC001", # isort configuration is missing
-    "ISC002", # isort configuration is missing
-    "Q000",   # Remove bad quotes
-    "Q001",   # Remove bad quotes
-    "Q002",   # Remove bad quotes
-    "Q003",   # Remove bad quotes
-
-    "TRY003", # Exception message should not be too long
-    "DOC501", # Missing raises section
+    "COM812",
+    "COM819",
+    "D107",
+    "D415",
+    "E111",
+    "E117",
+    "E203",
+    "E402",
+    "E501",
+    "ISC001",
+    "ISC002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "TRY003",
+    "DOC501",
 ]
-
-unfixable = ["F401", "DOC501"]
+unfixable = [
+    "F401",
+    "DOC501",
+]
+select = [
+    "DOC",
+    "D",
+]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 120
@@ -162,8 +179,22 @@ convention = "google"
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/*" = ["S101", "S603", "S607", "D102", "D200", "D100"]
-"**/test_*.py" = ["S101", "S603", "S607", "D102", "D200", "D100"]
+"**/tests/*" = [
+    "S101",
+    "S603",
+    "S607",
+    "D102",
+    "D200",
+    "D100",
+]
+"**/test_*.py" = [
+    "S101",
+    "S603",
+    "S607",
+    "D102",
+    "D200",
+    "D100",
+]
 
 [tool.mypy]
 python_version = "3.11"
@@ -181,8 +212,13 @@ mypy_path = []
 [tool.pyright]
 pythonVersion = "3.11"
 reportMissingTypeStubs = false
-include = ["packages/python_docs_init/"]
-extraPaths = ["packages/python_docs_init", "."]
+include = [
+    "packages/python_docs_init/",
+]
+extraPaths = [
+    "packages/python_docs_init",
+    ".",
+]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -190,13 +226,23 @@ addopts = [
     "--cov-report=term-missing",
     "-v",
 ]
-testpaths = ["packages/python_docs_init/tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-pythonpath = [".", "packages/"]
+testpaths = [
+    "packages/python_docs_init/tests",
+]
+python_files = [
+    "test_*.py",
+]
+python_classes = [
+    "Test*",
+]
+python_functions = [
+    "test_*",
+]
+pythonpath = [
+    ".",
+    "packages/",
+]
 markers = [
-
     "slow: tests that take significant time to run",
     "integration: integration tests",
 ]
@@ -232,5 +278,11 @@ allowed_tags = [
     "refactor",
     "test",
 ]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf", "refactor"]
+minor_tags = [
+    "feat",
+]
+patch_tags = [
+    "fix",
+    "perf",
+    "refactor",
+]
