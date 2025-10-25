@@ -173,7 +173,6 @@ def add_docs_dependencies(pyproject: dict, has_c_code: bool) -> dict:
         "mkdocs-mermaid2-plugin",
         "termynal",
         "mkdocs-recently-updated-docs",
-        "mkdocs-mcp",
     ]
 
     if has_c_code:
