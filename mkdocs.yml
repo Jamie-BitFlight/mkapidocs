@@ -37,7 +37,7 @@ plugins:
             show_category_heading: true
             members_order: source
 
-  - typer2
+  - mkdocs-typer2
 
 
   - mermaid2
@@ -46,7 +46,6 @@ plugins:
       limit: 10
       exclude:
         - index.md
-  - mcp
 
 markdown_extensions:
   - admonition

@@ -181,25 +181,46 @@ def validate(
             resolve_path=True,
         ),
     ],
+    min_api_coverage: Annotated[
+        float,
+        typer.Option(
+            "--min-api-coverage",
+            help="Minimum API documentation coverage percentage",
+            min=0.0,
+            max=100.0,
+            rich_help_panel="Validation Options",
+        ),
+    ] = 80.0,
 ) -> None:
     """Validate documentation setup for a Python repository.
 
-    This command checks that all required documentation files and configuration
-    are present and properly configured.
+    This command checks:
+    - Documentation builds without errors (mkdocs build --strict)
+    - API documentation coverage meets minimum threshold
+    - All links are valid (future)
+    - GitLab CI configuration is correct (future)
 
     Args:
         repo_path: Path to the repository
+        min_api_coverage: Minimum API documentation coverage percentage
     """
-    display_message(
-        f"Validation for [bold cyan]{repo_path}[/bold cyan] is not yet implemented.\n\n"
-        f"This feature will check:\n"
-        f"  - mkdocs.yml configuration\n"
-        f"  - Documentation dependencies in pyproject.toml\n"
-        f"  - GitLab CI configuration\n"
-        f"  - Documentation file structure",
-        MessageType.WARNING,
-        title="Not Implemented",
-    )
+    try:
+        # Import here to avoid circular imports and keep startup fast
+        from python_docs_init.validate import run_validation_with_report
+
+        display_message(
+            f"Validating documentation for [bold cyan]{repo_path}[/bold cyan]...",
+            MessageType.INFO,
+            title="Starting Validation",
+        )
+
+        success = run_validation_with_report(repo_path, min_api_coverage)
+
+    except Exception as e:
+        handle_error(e, f"Validation failed: {e}")
+
+    if not success:
+        raise typer.Exit(1)
 
 
 @app.callback()
