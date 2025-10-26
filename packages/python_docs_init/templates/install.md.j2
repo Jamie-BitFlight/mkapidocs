@@ -1,0 +1,148 @@
+# Installation
+
+This guide provides detailed installation instructions for {{ project_name }}.
+
+## Prerequisites
+
+- Python {{ requires_python if requires_python else "3.11+" }}
+- pip or uv package manager
+- Git (for development installation)
+
+## Quick Install
+
+### Using pip
+
+```bash
+pip install {{ project_name }}
+```
+
+### Using uv (Recommended)
+
+```bash
+uv pip install {{ project_name }}
+```
+
+## Development Installation
+
+For development work, clone the repository and install in editable mode with development dependencies:
+
+### Using uv (Recommended)
+
+```bash
+# Clone the repository
+git clone {{ git_url if git_url else "REPOSITORY_URL" }}
+cd {{ project_name }}
+
+# Install with all extras
+uv sync --all-extras
+
+# Or install specific extras
+uv sync --extra dev --extra docs
+```
+
+### Using pip
+
+```bash
+# Clone the repository
+git clone {{ git_url if git_url else "REPOSITORY_URL" }}
+cd {{ project_name }}
+
+# Install in editable mode with development dependencies
+pip install -e ".[dev,docs]"
+```
+
+## Optional Dependencies
+
+### Documentation
+
+To build documentation locally:
+
+```bash
+uv sync --extra docs
+# or
+pip install {{ project_name }}[docs]
+```
+
+### Development
+
+To install development tools (testing, linting):
+
+```bash
+uv sync --extra dev
+# or
+pip install {{ project_name }}[dev]
+```
+{% if has_c_code %}
+
+## Building C Extensions
+
+This project includes C/C++ extensions. A C compiler is required:
+
+**Linux/macOS:**
+- GCC or Clang should be available by default
+- Install build-essential on Ubuntu/Debian: `sudo apt install build-essential`
+
+**Windows:**
+- Install Microsoft Visual C++ Build Tools
+- Or use MinGW-w64
+{% endif %}
+
+## Verification
+
+Verify the installation:
+
+```bash
+# Check installed version
+{{ project_name }} --version
+{% if has_typer %}
+
+# Display help
+{{ project_name }} --help
+{% endif %}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Import Error**
+
+If you get an import error, ensure the package is installed in your active Python environment:
+
+```bash
+python -c "import {{ project_name.replace('-', '_') }}"
+```
+
+**Permission Error**
+
+On Linux/macOS, if you get permission errors, use a virtual environment instead of system Python:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install {{ project_name }}
+```
+{% if has_c_code %}
+
+**C Extension Build Failure**
+
+If C extensions fail to build, ensure you have a working C compiler installed. See the "Building C Extensions" section above.
+{% endif %}
+
+## Uninstallation
+
+To remove {{ project_name }}:
+
+```bash
+pip uninstall {{ project_name }}
+# or
+uv pip uninstall {{ project_name }}
+```
+
+## Next Steps
+
+- [Quick Start Guide](quick-start-guide.md) - Get started in 5 minutes
+- [API Reference](reference/python.md) - Explore the API documentation
+{% if has_typer %}
+- [CLI Reference](reference/cli.md) - Command-line interface documentation
+{% endif %}

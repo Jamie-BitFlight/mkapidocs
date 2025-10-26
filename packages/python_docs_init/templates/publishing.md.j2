@@ -1,0 +1,313 @@
+# Publishing and Release Process
+
+This guide describes the release and publishing process for {{ project_name }}.
+
+## Overview
+
+{{ project_name }} uses:
+- **Version Management**: hatch-vcs (automatic versioning from git tags)
+- **Build System**: Hatchling
+- **Package Index**: PyPI{% if gitlab_registry %} and GitLab Package Registry{% endif %}
+- **Documentation**: GitLab Pages (automatic deployment)
+
+## Version Management
+
+Versions are automatically determined from git tags using `hatch-vcs`:
+
+- `v1.0.0` tag → `1.0.0` release
+- No tag → `0.0.0.devN+gHASH` development version
+- Between tags → `1.0.1.devN+gHASH` pre-release
+
+### Version Scheme
+
+Follow [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Incompatible API changes
+- **MINOR**: New functionality, backward compatible
+- **PATCH**: Bug fixes, backward compatible
+
+## Release Checklist
+
+### Pre-Release
+
+- [ ] All tests pass locally
+- [ ] All CI/CD checks pass
+- [ ] Documentation is up to date
+- [ ] CHANGELOG.md is updated (if exists)
+- [ ] All issues in milestone are closed
+- [ ] Version bump is appropriate (major/minor/patch)
+
+### Release Steps
+
+#### 1. Update Documentation
+
+Ensure all documentation is current:
+
+```bash
+# Build and review documentation
+uv run mkdocs build --strict
+uv run mkdocs serve
+```
+
+#### 2. Create Git Tag
+
+```bash
+# Get current version
+git describe --tags
+
+# Create annotated tag
+git tag -a v1.2.3 -m "Release version 1.2.3"
+
+# Push tag to remote
+git push origin v1.2.3
+```
+
+#### 3. Build Package
+
+```bash
+# Clean previous builds
+rm -rf dist/
+
+# Build package
+uv build
+```
+
+This creates:
+- `dist/{{ project_name.replace('-', '_') }}-VERSION.tar.gz` (source distribution)
+- `dist/{{ project_name.replace('-', '_') }}-VERSION-py3-none-any.whl` (wheel)
+
+#### 4. Verify Build
+
+```bash
+# Check package contents
+tar -tzf dist/{{ project_name.replace('-', '_') }}-*.tar.gz
+
+# Install in test environment
+python -m venv test-env
+source test-env/bin/activate
+pip install dist/{{ project_name.replace('-', '_') }}-*.whl
+
+# Test installation
+{{ project_name }} --version
+python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+```
+
+#### 5. Publish to PyPI
+
+**Test PyPI (Optional):**
+
+```bash
+# Upload to Test PyPI
+uv publish --publish-url https://test.pypi.org/legacy/
+
+# Test installation
+pip install --index-url https://test.pypi.org/simple/ {{ project_name }}
+```
+
+**Production PyPI:**
+
+```bash
+# Upload to PyPI
+uv publish
+
+# Or use twine
+pip install twine
+twine upload dist/*
+```
+
+**Note**: Requires PyPI credentials. Configure with:
+
+```bash
+# Using uv (recommended)
+uv publish --username __token__ --password YOUR_PYPI_TOKEN
+
+# Or configure in ~/.pypirc
+[pypi]
+username = __token__
+password = YOUR_PYPI_TOKEN
+```
+{% if gitlab_registry %}
+
+#### 6. Publish to GitLab Package Registry
+
+```bash
+# Build and publish to GitLab
+uv build
+uv publish --publish-url {{ gitlab_registry_url if gitlab_registry_url else "GITLAB_REGISTRY_URL" }}
+```
+
+Configure GitLab credentials in `~/.pypirc`:
+
+```ini
+[gitlab]
+repository = {{ gitlab_registry_url if gitlab_registry_url else "GITLAB_REGISTRY_URL" }}
+username = gitlab-ci-token
+password = YOUR_GITLAB_TOKEN
+```
+{% endif %}
+
+### Post-Release
+
+- [ ] Verify package on PyPI
+- [ ] Test installation: `pip install {{ project_name }}`
+- [ ] Create GitHub/GitLab release with changelog
+- [ ] Announce release (if applicable)
+- [ ] Update version in development branch
+- [ ] Close milestone (if using)
+
+## Automated Release with CI/CD
+
+### GitLab CI Configuration
+
+The `.gitlab/workflows/pages.gitlab-ci.yml` includes automatic publishing:
+
+```yaml
+publish:
+  stage: deploy
+  image: python:3.11
+  before_script:
+    - pip install uv
+  script:
+    - uv build
+    - uv publish
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  only:
+    - tags
+```
+
+### Triggering Automated Release
+
+```bash
+# Create and push tag
+git tag -a v1.2.3 -m "Release 1.2.3"
+git push origin v1.2.3
+```
+
+CI/CD will automatically:
+1. Build the package
+2. Run tests
+3. Build documentation
+4. Publish to PyPI
+5. Deploy documentation to GitLab Pages
+
+## Documentation Deployment
+
+Documentation is automatically deployed to GitLab Pages on:
+- Every commit to main branch (latest docs)
+- Every tag (versioned docs)
+
+Access at: `{{ site_url if site_url else "SITE_URL" }}`
+
+## Rollback Procedure
+
+### Unpublish from PyPI
+
+**Note**: PyPI does not allow re-uploading the same version. You must:
+
+1. Yank the release (marks as unavailable):
+```bash
+# Not directly supported by uv, use twine
+pip install twine
+twine yank {{ project_name }} --version 1.2.3
+```
+
+2. Release a new patch version with fixes
+
+### Revert Git Tag
+
+```bash
+# Delete local tag
+git tag -d v1.2.3
+
+# Delete remote tag
+git push origin :refs/tags/v1.2.3
+```
+
+## Version Queries
+
+```bash
+# Current version from git
+git describe --tags
+
+# Installed version
+{{ project_name }} --version
+python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+
+# Latest version on PyPI
+pip index versions {{ project_name }}
+```
+
+## Credentials Management
+
+### Environment Variables
+
+Set credentials via environment:
+
+```bash
+export UV_PUBLISH_USERNAME="__token__"
+export UV_PUBLISH_PASSWORD="pypi-..."
+```
+
+### GitLab CI/CD Variables
+
+Configure in GitLab project settings → CI/CD → Variables:
+
+- `PYPI_TOKEN`: PyPI API token
+- `GITLAB_TOKEN`: GitLab personal access token (if using GitLab registry)
+
+## Troubleshooting
+
+### Build Fails
+
+**Issue**: Package build fails
+
+**Solution**:
+- Check `pyproject.toml` syntax
+- Ensure all files are included in git
+- Review build logs for missing dependencies
+
+### Upload Fails
+
+**Issue**: Upload to PyPI fails with authentication error
+
+**Solution**:
+- Verify API token is correct
+- Check token has upload permissions
+- Ensure token is not expired
+
+### Version Conflict
+
+**Issue**: Version already exists on PyPI
+
+**Solution**:
+- PyPI does not allow re-uploading same version
+- Create new tag with incremented version
+- Delete old tag if not yet published
+
+### Documentation Not Updating
+
+**Issue**: GitLab Pages not reflecting changes
+
+**Solution**:
+- Check CI/CD pipeline status
+- Verify pages job completed successfully
+- Pages may take a few minutes to update
+- Clear browser cache
+
+## Best Practices
+
+1. **Never skip testing**: Always test before release
+2. **Use semantic versioning**: Be consistent with version numbers
+3. **Write changelogs**: Document what changed
+4. **Tag consistently**: Use `vX.Y.Z` format
+5. **Test installations**: Verify package works after publishing
+6. **Automate when possible**: Use CI/CD for releases
+7. **Keep credentials secure**: Use tokens, never commit credentials
+
+## Additional Resources
+
+- [Semantic Versioning](https://semver.org/)
+- [Python Packaging Guide](https://packaging.python.org/)
+- [PyPI Documentation](https://pypi.org/help/)
+- [GitLab Package Registry](https://docs.gitlab.com/ee/user/packages/pypi_repository/)

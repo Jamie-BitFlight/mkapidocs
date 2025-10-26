@@ -283,6 +283,67 @@ def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool) -
         (reference_dir / "c.md").write_text(c_content)
 
 
+def create_supporting_docs(
+    repo_path: Path,
+    project_name: str,
+    pyproject: dict,
+    has_c_code: bool,
+    has_typer: bool,
+    site_url: str,
+    git_url: str | None = None,
+) -> None:
+    """Create supporting documentation pages.
+
+    Args:
+        repo_path: Path to repository.
+        project_name: Name of the project.
+        pyproject: Parsed pyproject.toml.
+        has_c_code: Whether repository contains C/C++ code.
+        has_typer: Whether repository uses Typer.
+        site_url: Full URL for GitLab Pages site.
+        git_url: Git repository URL. If None, attempts to detect from git remote.
+    """
+    docs_dir = repo_path / "docs"
+    docs_dir.mkdir(exist_ok=True)
+
+    template_dir = Path(__file__).parent / "templates"
+    # S701: autoescape not needed - generating Markdown documentation, not HTML
+    env = Environment(loader=FileSystemLoader(template_dir))  # noqa: S701
+
+    # Extract common template variables
+    requires_python = pyproject.get("project", {}).get("requires-python", "3.11+")
+
+    # Detect git URL if not provided
+    if git_url is None:
+        try:
+            result = subprocess.run(
+                ["git", "remote", "get-url", "origin"],  # noqa: S607
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            git_url = result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            git_url = None
+
+    template_context = {
+        "project_name": project_name,
+        "requires_python": requires_python,
+        "git_url": git_url,
+        "has_c_code": has_c_code,
+        "has_typer": has_typer,
+        "site_url": site_url,
+    }
+
+    # Generate each supporting document
+    for doc_name in ["install", "quick-start-guide", "contributing", "publishing"]:
+        template = env.get_template(f"{doc_name}.md.j2")
+        content = template.render(**template_context)
+        doc_path = docs_dir / f"{doc_name}.md"
+        doc_path.write_text(content)
+
+
 def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> None:
     """Set up MkDocs documentation for a Python repository.
 
@@ -321,3 +382,4 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
     create_gitlab_ci(repo_path)
     create_index_page(repo_path, project_name, description, has_c_code, has_typer, license_name)
     create_api_reference(repo_path, project_name, has_c_code)
+    create_supporting_docs(repo_path, project_name, pyproject, has_c_code, has_typer, site_url)
