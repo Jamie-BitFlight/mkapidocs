@@ -77,8 +77,17 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Getting Started:
+    - Installation: install.md
+    - Quick Start Guide: quick-start-guide.md
   - API Reference:
     - Python API: reference/python.md
 {% if has_c_code %}
     - C API: reference/c.md
 {% endif %}
+{% if has_typer %}
+    - CLI Reference: reference/cli.md
+{% endif %}
+  - Development:
+    - Contributing: contributing.md
+    - Publishing: publishing.md

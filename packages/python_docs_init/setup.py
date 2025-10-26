@@ -257,13 +257,14 @@ def create_index_page(
     index_path.write_text(content)
 
 
-def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool) -> None:
+def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool, has_typer: bool) -> None:
     """Create API reference documentation pages.
 
     Args:
         repo_path: Path to repository.
         project_name: Name of the project.
         has_c_code: Whether repository contains C/C++ code.
+        has_typer: Whether repository uses Typer.
     """
     reference_dir = repo_path / "docs" / "reference"
     reference_dir.mkdir(parents=True, exist_ok=True)
@@ -272,8 +273,9 @@ def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool) -
     # S701: autoescape not needed - generating Markdown documentation, not HTML
     env = Environment(loader=FileSystemLoader(template_dir))  # noqa: S701
 
-    python_template = env.get_template("python_api.md.j2")
     package_name = project_name.replace("-", "_")
+
+    python_template = env.get_template("python_api.md.j2")
     python_content = python_template.render(package_name=package_name)
     (reference_dir / "python.md").write_text(python_content)
 
@@ -281,6 +283,11 @@ def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool) -
         c_template = env.get_template("c_api.md.j2")
         c_content = c_template.render(project_name=project_name)
         (reference_dir / "c.md").write_text(c_content)
+
+    if has_typer:
+        cli_template = env.get_template("cli.md.j2")
+        cli_content = cli_template.render(project_name=project_name, package_name=package_name)
+        (reference_dir / "cli.md").write_text(cli_content)
 
 
 def create_supporting_docs(
@@ -324,6 +331,14 @@ def create_supporting_docs(
                 check=True,
             )
             git_url = result.stdout.strip()
+
+            # Convert SSH URL to HTTPS format for proper linking
+            # git@host:group/project.git -> https://host/group/project
+            ssh_match = re.match(r"git@([^:]+):(.+)\.git", git_url)
+            if ssh_match:
+                host = ssh_match.group(1)
+                path = ssh_match.group(2)
+                git_url = f"https://{host}/{path}"
         except (subprocess.CalledProcessError, FileNotFoundError):
             git_url = None
 
@@ -381,5 +396,5 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
     create_mkdocs_config(repo_path, project_name, site_url, has_c_code, has_typer)
     create_gitlab_ci(repo_path)
     create_index_page(repo_path, project_name, description, has_c_code, has_typer, license_name)
-    create_api_reference(repo_path, project_name, has_c_code)
+    create_api_reference(repo_path, project_name, has_c_code, has_typer)
     create_supporting_docs(repo_path, project_name, pyproject, has_c_code, has_typer, site_url)
