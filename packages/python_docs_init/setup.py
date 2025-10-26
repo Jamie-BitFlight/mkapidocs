@@ -1,7 +1,7 @@
 """Core documentation setup functionality."""
 
 import re
-import subprocess
+import subprocess  # noqa: S404
 import tomllib
 from pathlib import Path
 
@@ -23,8 +23,9 @@ def detect_gitlab_url_base(repo_path: Path) -> str | None:
         -> https://aehgfw.sourcery.assaabloy.net/tools/
     """
     try:
+        # S607: git is a standard system tool, safe to use
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
+            ["git", "remote", "get-url", "origin"],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -54,8 +55,8 @@ def detect_gitlab_url_base(repo_path: Path) -> str | None:
                 subdomain = parts[0]
                 path = "/".join(parts[1:])
                 return f"https://{subdomain}.{host}/{path}/"
-
-        return None
+        else:
+            return None
 
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
@@ -223,13 +224,18 @@ def create_gitlab_ci(repo_path: Path) -> None:
     ci_path.write_text(content)
 
 
-def create_index_page(repo_path: Path, project_name: str, description: str) -> None:
+def create_index_page(
+    repo_path: Path, project_name: str, description: str, has_c_code: bool, has_typer: bool, license_name: str
+) -> None:
     """Create docs/index.md homepage.
 
     Args:
         repo_path: Path to repository.
         project_name: Name of the project.
         description: Project description from pyproject.toml.
+        has_c_code: Whether repository contains C/C++ code.
+        has_typer: Whether repository uses Typer.
+        license_name: License name from pyproject.toml.
     """
     docs_dir = repo_path / "docs"
     docs_dir.mkdir(exist_ok=True)
@@ -239,7 +245,13 @@ def create_index_page(repo_path: Path, project_name: str, description: str) -> N
     env = Environment(loader=FileSystemLoader(template_dir))  # noqa: S701
     template = env.get_template("index.md.j2")
 
-    content = template.render(project_name=project_name, description=description)
+    content = template.render(
+        project_name=project_name,
+        description=description,
+        has_c_code=has_c_code,
+        has_typer=has_typer,
+        license=license_name,
+    )
 
     index_path = docs_dir / "index.md"
     index_path.write_text(content)
@@ -285,14 +297,15 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
 
     project_name = pyproject.get("project", {}).get("name", repo_path.name)
     description = pyproject.get("project", {}).get("description", "")
+    license_info = pyproject.get("project", {}).get("license", {})
+    license_name = license_info.get("text", "See LICENSE file")
 
     # Auto-detect GitLab URL if not provided
     if gitlab_url_base is None:
         gitlab_url_base = detect_gitlab_url_base(repo_path)
         if gitlab_url_base is None:
             raise ValueError(
-                "Could not auto-detect GitLab URL from git remote. "
-                "Please provide --gitlab-url-base option."
+                "Could not auto-detect GitLab URL from git remote. Please provide --gitlab-url-base option."
             )
 
     site_url = f"{gitlab_url_base.rstrip('/')}/{project_name}/"
@@ -306,5 +319,5 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
 
     create_mkdocs_config(repo_path, project_name, site_url, has_c_code, has_typer)
     create_gitlab_ci(repo_path)
-    create_index_page(repo_path, project_name, description)
+    create_index_page(repo_path, project_name, description, has_c_code, has_typer, license_name)
     create_api_reference(repo_path, project_name, has_c_code)

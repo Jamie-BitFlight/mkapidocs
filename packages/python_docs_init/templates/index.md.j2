@@ -2,36 +2,40 @@
 
 {{ description }}
 
-## Quick Start
+## Documentation
 
-TODO: Add quick start guide
+- [Quick Start Guide](quick-start-guide.md) - Get started in 5 minutes
+- [Installation](install.md) - Detailed installation instructions
+- [API Reference](reference/python.md) - Python API documentation
+{% if has_c_code %}
+- [C API Reference](reference/c.md) - C/C++ API documentation
+{% endif %}
+{% if has_typer %}
+- [CLI Reference](reference/cli.md) - Command-line interface
+{% endif %}
+- [Contributing](contributing.md) - Contribution guidelines
+- [Publishing](publishing.md) - Release and publishing process
 
 ## Features
 
 TODO: Add feature list
 
-## Installation
+## Quick Install
 
 ```bash
 pip install {{ project_name }}
 ```
 
+For detailed installation instructions, see the [Installation Guide](install.md).
+
 ## Usage
 
-TODO: Add usage examples
+See the [Quick Start Guide](quick-start-guide.md) for basic usage examples.
 
 ## Recently Updated
 
 <!-- RECENTLY_UPDATED_DOCS -->
 
-## API Reference
-
-- [Python API](reference/python.md)
-
-## Contributing
-
-TODO: Add contributing guidelines
-
 ## License
 
-TODO: Add license information
+{{ license }}

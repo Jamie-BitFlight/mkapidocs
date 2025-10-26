@@ -65,7 +65,6 @@ docs = [
     "mkdocs-mermaid2-plugin",
     "termynal",
     "mkdocs-recently-updated-docs",
-    "mkdocs-mcp",
 ]
 
 [project.urls]
