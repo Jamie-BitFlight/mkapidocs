@@ -93,10 +93,10 @@ Verify the installation:
 
 ```bash
 # Check installed version
-{{ project_name }} --version
+python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
 {% if has_typer %}
 
-# Display help
+# Display CLI help
 {{ project_name }} --help
 {% endif %}
 ```

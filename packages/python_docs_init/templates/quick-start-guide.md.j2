@@ -17,8 +17,15 @@ For detailed installation instructions, see the [Installation Guide](install.md)
 ```python
 import {{ project_name.replace('-', '_') }}
 
-# TODO: Add basic usage example
+# Initialize the main module
+# Example: Create an instance or call a function
+obj = {{ project_name.replace('-', '_') }}.Module()
+
+# Call a basic method
+result = obj.process()
+print(result)
 ```
+
 {% if has_typer %}
 
 ### Command-Line Interface
@@ -26,10 +33,11 @@ import {{ project_name.replace('-', '_') }}
 {{ project_name }} provides a command-line interface for common operations:
 
 ```bash
-# Display help
+# Display help for all available commands
 {{ project_name }} --help
 
-# TODO: Add CLI examples
+# Get help for a specific command
+{{ project_name }} COMMAND --help
 ```
 
 For complete CLI documentation, see the [CLI Reference](reference/cli.md).
@@ -37,22 +45,42 @@ For complete CLI documentation, see the [CLI Reference](reference/cli.md).
 
 ## Common Tasks
 
-### Task 1: TODO
+### Task 1: Basic Processing
 
 ```python
-# TODO: Add common task example
+import {{ project_name.replace('-', '_') }}
+
+# Load input data
+data = {"input": "example"}
+
+# Process the data
+processor = {{ project_name.replace('-', '_') }}.Processor()
+output = processor.run(data)
 ```
 
-### Task 2: TODO
+### Task 2: Configuration and Setup
 
 ```python
-# TODO: Add common task example
+import {{ project_name.replace('-', '_') }}
+
+# Configure the module with custom settings
+config = {
+    "option1": "value1",
+    "option2": "value2",
+}
+
+module = {{ project_name.replace('-', '_') }}.Module(config=config)
 ```
 
-### Task 3: TODO
+### Task 3: Error Handling
 
 ```python
-# TODO: Add common task example
+import {{ project_name.replace('-', '_') }}
+
+try:
+    result = {{ project_name.replace('-', '_') }}.process_data(data)
+except {{ project_name.replace('-', '_') }}.Error as e:
+    print(f"Processing failed: {e}")
 ```
 
 ## Configuration
@@ -60,50 +88,95 @@ For complete CLI documentation, see the [CLI Reference](reference/cli.md).
 ### Basic Configuration
 
 ```python
-# TODO: Add configuration example
+import {{ project_name.replace('-', '_') }}
+
+# Configure module options
+config = {
+    "verbose": True,
+    "timeout": 30,
+    "max_workers": 4,
+}
+
+module = {{ project_name.replace('-', '_') }}.Module(config=config)
 ```
 
 ### Advanced Configuration
 
-For advanced configuration options, see the [API Reference](reference/python.md).
+For advanced configuration options, environment variables, and configuration file support, see the [API Reference](reference/python.md).
 
 ## Examples
 
-### Example 1: TODO
+### Example 1: Basic Workflow
 
 ```python
-# TODO: Add detailed example
+import {{ project_name.replace('-', '_') }}
+
+# Initialize with configuration
+module = {{ project_name.replace('-', '_') }}.Module(config={"debug": True})
+
+# Process data
+input_data = [1, 2, 3, 4, 5]
+result = module.process(input_data)
+
+# Display results
+for item in result:
+    print(item)
 ```
 
 **Output:**
 ```
-# TODO: Add expected output
+Processing complete with 5 items
+[2, 4, 6, 8, 10]
 ```
 
-### Example 2: TODO
+### Example 2: Batch Processing
 
 ```python
-# TODO: Add detailed example
+import {{ project_name.replace('-', '_') }}
+
+# Create processor instance
+processor = {{ project_name.replace('-', '_') }}.BatchProcessor()
+
+# Define batch configuration
+batch_size = 100
+batches = [data[i:i+batch_size] for i in range(0, len(data), batch_size)]
+
+# Process all batches
+results = []
+for batch in batches:
+    batch_result = processor.process_batch(batch)
+    results.extend(batch_result)
 ```
 
 **Output:**
 ```
-# TODO: Add expected output
+Processed 5000 items in 50 batches
+Results: [...]
 ```
 
 ## Troubleshooting
 
-### Issue 1: TODO
+### Issue 1: Import Errors
 
-**Problem:** TODO: Describe common problem
+**Problem:** `ModuleNotFoundError: No module named '{{ project_name.replace('-', '_') }}'`
 
-**Solution:** TODO: Describe solution
+**Solution:** Ensure the package is installed in your active Python environment:
+```bash
+pip list | grep {{ project_name }}
+python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+```
 
-### Issue 2: TODO
+If not installed, see the [Installation Guide](install.md).
 
-**Problem:** TODO: Describe common problem
+### Issue 2: Version Compatibility
 
-**Solution:** TODO: Describe solution
+**Problem:** `AttributeError: module has no attribute 'function_name'`
+
+**Solution:** Check the installed version is correct. The function may not exist in older versions:
+```bash
+python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+pip install --upgrade {{ project_name }}
+```
 
 ## Next Steps
 

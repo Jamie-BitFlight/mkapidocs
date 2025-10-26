@@ -4,9 +4,56 @@ import re
 import subprocess  # noqa: S404
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import tomli_w
 from jinja2 import Environment, FileSystemLoader
+
+
+def get_git_remote_url(repo_path: Path) -> str | None:
+    """Get git remote URL from repository.
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        Git remote URL or None if not available.
+    """
+    try:
+        # S607: git is a standard system tool, safe to use
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],  # noqa: S607
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def convert_ssh_to_https(git_url: str) -> str:
+    """Convert SSH git URL to HTTPS format.
+
+    Args:
+        git_url: Git URL in SSH format (git@host:path or ssh://git@host/path).
+
+    Returns:
+        HTTPS URL format (https://host/path).
+
+    Example:
+        git@sourcery.assaabloy.net:group/project.git -> https://sourcery.assaabloy.net/group/project
+        ssh://git@github.com:443/user/repo.git -> https://github.com/user/repo
+    """
+    # Handle ssh:// protocol variant with optional port
+    ssh_protocol_match = re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)(?:\.git)?$", git_url)
+    if ssh_protocol_match:
+        host = ssh_protocol_match.group(1)
+        path = ssh_protocol_match.group(2)
+        return f"https://{host}/{path}"
+    return git_url
 
 
 def detect_gitlab_url_base(repo_path: Path) -> str | None:
@@ -22,47 +69,41 @@ def detect_gitlab_url_base(repo_path: Path) -> str | None:
         git@sourcery.assaabloy.net:aehgfw/tools/python_picotool.git
         -> https://aehgfw.sourcery.assaabloy.net/tools/
     """
-    try:
-        # S607: git is a standard system tool, safe to use
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],  # noqa: S607
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        remote_url = result.stdout.strip()
-
-        # Parse SSH format: git@host:group/subgroup/project.git
-        ssh_match = re.match(r"git@([^:]+):(.+)/([^/]+)\.git", remote_url)
-        if ssh_match:
-            host = ssh_match.group(1)
-            group_path = ssh_match.group(2)
-            # Split group path: aehgfw/tools -> aehgfw, tools
-            parts = group_path.split("/")
-            if len(parts) >= 2:
-                subdomain = parts[0]
-                path = "/".join(parts[1:])
-                return f"https://{subdomain}.{host}/{path}/"
-
-        # Parse HTTPS format: https://host/group/subgroup/project.git
-        https_match = re.match(r"https://([^/]+)/(.+)/([^/]+)\.git", remote_url)
-        if https_match:
-            host = https_match.group(1)
-            group_path = https_match.group(2)
-            parts = group_path.split("/")
-            if len(parts) >= 2:
-                subdomain = parts[0]
-                path = "/".join(parts[1:])
-                return f"https://{subdomain}.{host}/{path}/"
-        else:
-            return None
-
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    remote_url = get_git_remote_url(repo_path)
+    if remote_url is None:
         return None
 
+    # Parse SSH format: git@host:group/subgroup/project.git
+    # Handle ssh:// protocol variant with optional port and optional .git suffix
+    ssh_match = re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)/([^/]+?)(?:\.git)?$", remote_url)
+    if ssh_match:
+        host = ssh_match.group(1)
+        group_path = ssh_match.group(2)
+        # Split group path: aehgfw/tools -> aehgfw, tools
+        # Filter empty strings from split to handle trailing/leading slashes
+        parts = [p for p in group_path.split("/") if p]
+        if len(parts) >= 2:
+            subdomain = parts[0]
+            path = "/".join(parts[1:])
+            return f"https://{subdomain}.{host}/{path}/"
 
-def read_pyproject(repo_path: Path) -> dict:
+    # Parse HTTPS format: https://host/group/subgroup/project.git
+    # Handle HTTPS with auth and optional .git suffix
+    https_match = re.match(r"^https://(?:[^@]+@)?([^/]+)/(.+?)/([^/]+?)(?:\.git)?$", remote_url)
+    if https_match:
+        host = https_match.group(1)
+        group_path = https_match.group(2)
+        # Filter empty strings from split to handle trailing/leading slashes
+        parts = [p for p in group_path.split("/") if p]
+        if len(parts) >= 2:
+            subdomain = parts[0]
+            path = "/".join(parts[1:])
+            return f"https://{subdomain}.{host}/{path}/"
+
+    return None
+
+
+def read_pyproject(repo_path: Path) -> dict[str, Any]:
     """Read and parse pyproject.toml.
 
     Args:
@@ -82,7 +123,7 @@ def read_pyproject(repo_path: Path) -> dict:
         return tomllib.load(f)
 
 
-def write_pyproject(repo_path: Path, config: dict) -> None:
+def write_pyproject(repo_path: Path, config: dict[str, Any]) -> None:
     """Write pyproject.toml.
 
     Args:
@@ -111,7 +152,7 @@ def detect_c_code(repo_path: Path) -> bool:
     return any(file_path.suffix in c_extensions for file_path in source_dir.rglob("*"))
 
 
-def detect_typer_dependency(pyproject: dict) -> bool:
+def detect_typer_dependency(pyproject: dict[str, Any]) -> bool:
     """Detect if project depends on Typer.
 
     Args:
@@ -124,7 +165,7 @@ def detect_typer_dependency(pyproject: dict) -> bool:
     return any(dep.strip().lower().startswith("typer") for dep in dependencies)
 
 
-def update_ruff_config(pyproject: dict) -> dict:
+def update_ruff_config(pyproject: dict[str, Any]) -> dict[str, Any]:
     """Add docstring linting rules to ruff configuration.
 
     Args:
@@ -151,7 +192,7 @@ def update_ruff_config(pyproject: dict) -> dict:
     return pyproject
 
 
-def add_docs_dependencies(pyproject: dict, has_c_code: bool) -> dict:
+def add_docs_dependencies(pyproject: dict[str, Any], has_c_code: bool) -> dict[str, Any]:
     """Add documentation dependencies to pyproject.toml.
 
     Args:
@@ -293,7 +334,7 @@ def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool, h
 def create_supporting_docs(
     repo_path: Path,
     project_name: str,
-    pyproject: dict,
+    pyproject: dict[str, Any],
     has_c_code: bool,
     has_typer: bool,
     site_url: str,
@@ -322,25 +363,10 @@ def create_supporting_docs(
 
     # Detect git URL if not provided
     if git_url is None:
-        try:
-            result = subprocess.run(
-                ["git", "remote", "get-url", "origin"],  # noqa: S607
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            git_url = result.stdout.strip()
-
+        git_url = get_git_remote_url(repo_path)
+        if git_url is not None:
             # Convert SSH URL to HTTPS format for proper linking
-            # git@host:group/project.git -> https://host/group/project
-            ssh_match = re.match(r"git@([^:]+):(.+)\.git", git_url)
-            if ssh_match:
-                host = ssh_match.group(1)
-                path = ssh_match.group(2)
-                git_url = f"https://{host}/{path}"
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            git_url = None
+            git_url = convert_ssh_to_https(git_url)
 
     template_context = {
         "project_name": project_name,
