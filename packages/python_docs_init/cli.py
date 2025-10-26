@@ -141,7 +141,7 @@ def setup(
     """
     try:
         # Import here to avoid circular imports and keep startup fast
-        from python_docs_init.setup import setup_documentation
+        from python_docs_init.generator import setup_documentation
 
         display_message(
             f"Setting up documentation for [bold cyan]{repo_path}[/bold cyan]...",
