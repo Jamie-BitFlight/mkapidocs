@@ -5,72 +5,31 @@ This guide provides detailed installation instructions for {{ project_name }}.
 ## Prerequisites
 
 - Python {{ requires_python if requires_python else "3.11+" }}
-- pip or uv package manager
+- uv package manager
 - Git (for development installation)
 
 ## Quick Install
 
-### Using pip
+To add {{ project_name }} as a dependency to your project:
 
 ```bash
-pip install {{ project_name }}
-```
-
-### Using uv (Recommended)
-
-```bash
-uv pip install {{ project_name }}
+uv add {{ project_name }}
 ```
 
 ## Development Installation
 
-For development work, clone the repository and install in editable mode with development dependencies:
-
-### Using uv (Recommended)
+For development work, clone the repository and install with all dependencies:
 
 ```bash
 # Clone the repository
 git clone {{ git_url if git_url else "REPOSITORY_URL" }}
 cd {{ project_name }}
 
-# Install with all extras
+# Install with all dependencies
 uv sync --all-extras
 
 # Or install specific extras
-uv sync --extra dev --extra docs
-```
-
-### Using pip
-
-```bash
-# Clone the repository
-git clone {{ git_url if git_url else "REPOSITORY_URL" }}
-cd {{ project_name }}
-
-# Install in editable mode with development dependencies
-pip install -e ".[dev,docs]"
-```
-
-## Optional Dependencies
-
-### Documentation
-
-To build documentation locally:
-
-```bash
-uv sync --extra docs
-# or
-pip install {{ project_name }}[docs]
-```
-
-### Development
-
-To install development tools (testing, linting):
-
-```bash
 uv sync --extra dev
-# or
-pip install {{ project_name }}[dev]
 ```
 {% if has_c_code %}
 
@@ -93,7 +52,7 @@ Verify the installation:
 
 ```bash
 # Check installed version
-python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
 {% if has_typer %}
 
 # Display CLI help
@@ -115,12 +74,14 @@ python -c "import {{ project_name.replace('-', '_') }}"
 
 **Permission Error**
 
-On Linux/macOS, if you get permission errors, use a virtual environment instead of system Python:
+uv automatically manages virtual environments, so permission errors should not occur. If you encounter permission issues, ensure uv is properly installed:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install {{ project_name }}
+# Verify uv installation
+uv --version
+
+# Add the package to your project
+uv add {{ project_name }}
 ```
 {% if has_c_code %}
 
@@ -131,12 +92,10 @@ If C extensions fail to build, ensure you have a working C compiler installed. S
 
 ## Uninstallation
 
-To remove {{ project_name }}:
+To remove {{ project_name }} from your project:
 
 ```bash
-pip uninstall {{ project_name }}
-# or
-uv pip uninstall {{ project_name }}
+uv remove {{ project_name }}
 ```
 
 ## Next Steps

@@ -5,7 +5,7 @@ Get started with {{ project_name }} in 5 minutes.
 ## Installation
 
 ```bash
-pip install {{ project_name }}
+uv add {{ project_name }}
 ```
 
 For detailed installation instructions, see the [Installation Guide](install.md).
@@ -160,13 +160,13 @@ Results: [...]
 
 **Problem:** `ModuleNotFoundError: No module named '{{ project_name.replace('-', '_') }}'`
 
-**Solution:** Ensure the package is installed in your active Python environment:
+**Solution:** Ensure the package is installed in your project:
 ```bash
-pip list | grep {{ project_name }}
-python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+uv pip list | grep {{ project_name }}
+python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
 ```
 
-If not installed, see the [Installation Guide](install.md).
+If not installed, add it with `uv add {{ project_name }}` or see the [Installation Guide](install.md).
 
 ### Issue 2: Version Compatibility
 
@@ -174,8 +174,8 @@ If not installed, see the [Installation Guide](install.md).
 
 **Solution:** Check the installed version is correct. The function may not exist in older versions:
 ```bash
-python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
-pip install --upgrade {{ project_name }}
+python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
+uv add --upgrade {{ project_name }}
 ```
 
 ## Next Steps

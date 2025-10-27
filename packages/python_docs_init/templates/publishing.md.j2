@@ -89,7 +89,7 @@ pip install dist/{{ project_name.replace('-', '_') }}-*.whl
 
 # Test installation
 {{ project_name }} --version
-python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
 ```
 
 #### 5. Publish to PyPI
@@ -101,7 +101,7 @@ python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.re
 uv publish --publish-url https://test.pypi.org/legacy/
 
 # Test installation
-pip install --index-url https://test.pypi.org/simple/ {{ project_name }}
+uv pip install --index-url https://test.pypi.org/simple/ {{ project_name }}
 ```
 
 **Production PyPI:**
@@ -111,8 +111,7 @@ pip install --index-url https://test.pypi.org/simple/ {{ project_name }}
 uv publish
 
 # Or use twine
-pip install twine
-twine upload dist/*
+uvx twine upload dist/*
 ```
 
 **Note**: Requires PyPI credentials. Configure with:
@@ -149,7 +148,7 @@ password = YOUR_GITLAB_TOKEN
 ### Post-Release
 
 - [ ] Verify package on PyPI
-- [ ] Test installation: `pip install {{ project_name }}`
+- [ ] Test installation: `uv add {{ project_name }}`
 - [ ] Create GitHub/GitLab release with changelog
 - [ ] Announce release (if applicable)
 - [ ] Update version in development branch
@@ -164,9 +163,7 @@ The `.gitlab/workflows/pages.gitlab-ci.yml` includes automatic publishing:
 ```yaml
 publish:
   stage: deploy
-  image: python:3.11
-  before_script:
-    - pip install uv
+  image: ghcr.io/astral-sh/uv:python3.11
   script:
     - uv build
     - uv publish
@@ -208,8 +205,7 @@ Access at: `{{ site_url if site_url else "SITE_URL" }}`
 1. Yank the release (marks as unavailable):
 ```bash
 # Not directly supported by uv, use twine
-pip install twine
-twine yank {{ project_name }} --version 1.2.3
+uvx twine yank {{ project_name }} --version 1.2.3
 ```
 
 2. Release a new patch version with fixes
@@ -232,10 +228,10 @@ git describe --tags
 
 # Installed version
 {{ project_name }} --version
-python -c "import {{ project_name.replace('-', '_') }}; print({{ project_name.replace('-', '_') }}.__version__)"
+python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
 
 # Latest version on PyPI
-pip index versions {{ project_name }}
+uv pip index versions {{ project_name }}
 ```
 
 ## Credentials Management

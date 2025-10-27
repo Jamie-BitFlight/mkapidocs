@@ -1,10 +1,8 @@
 pages:
   stage: deploy
-  image: python:3.11
+  image: ghcr.io/astral-sh/uv:python3.11
   script:
-    - pip install uv
-    - uv pip install --system -e .[docs]
-    - mkdocs build --strict --verbose
+    - uvx python-docs-init build . --strict
     - mv site public
   artifacts:
     paths:
