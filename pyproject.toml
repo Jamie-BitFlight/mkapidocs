@@ -1,107 +1,13 @@
 [project]
-name = "python_docs_init"
-description = "Automated documentation setup tool for Python projects using MkDocs and GitLab Pages"
+name = "python-docs-init"
+version = "0.1.0"
+description = "Automated documentation setup tool for Python projects using MkDocs and GitLab Pages. A PEP 723 standalone script that intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, GitLab Pages workflow, and docstring linting configuration."
 readme = "README.md"
-dynamic = [
-    "version",
-]
+requires-python = ">=3.11,<3.13"
 authors = [
     { name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" },
 ]
-maintainers = [
-    { name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" },
-]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: Public Domain",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: System :: Hardware",
-]
-keywords = [
-    "mkdocs",
-    "documentation",
-    "gitlab-pages",
-    "automation",
-]
-requires-python = ">=3.11,<3.13"
-dependencies = [
-    "typer>=0.19.2",
-    "python-dotenv>=1.1.1",
-    "pydantic>=2.12.2",
-    "jinja2>=3.1.6",
-    "tomli-w>=1.2.0",
-]
-
-[project.license]
-text = "Unlicense"
-
-[project.scripts]
-python_docs_init = "python_docs_init.cli:app"
-
-[project.optional-dependencies]
-dev = [
-    "pre-commit>=4.3.0",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=0.24.0",
-    "pytest-cov>=7.0.0",
-    "pytest-mock>=3.14.0",
-    "pytest-timeout>=2.1.0",
-    "pytest-xdist>=3.5.0",
-    "pyright>=1.1.345",
-    "mypy>=1.15.0",
-    "ruff>=0.13.3",
-    "hatchling>=1.14.0",
-    "hatch-vcs>=0.5.0",
-    "python-semantic-release>=9.0.0",
-]
-docs = [
-    "mkdocs",
-    "mkdocs-material",
-    "mkdocs-typer2",
-    "mkdocstrings[python]",
-    "mkdocs-mermaid2-plugin",
-    "termynal",
-    "mkdocs-recently-updated-docs",
-]
-validation = [
-    "griffe>=1.0.0",
-    "interrogate>=1.7.0",
-    "beautifulsoup4>=4.12.0",
-    "lxml>=5.0.0",
-]
-
-[project.urls]
-Homepage = "https://sourcery.assaabloy.net/"
-Documentation = "https://sourcery.assaabloy.net//-/blob/main/README.md"
-Repository = "https://sourcery.assaabloy.net/"
-"Bug Tracker" = "https://sourcery.assaabloy.net//-/issues"
-
-[build-system]
-requires = [
-    "hatchling",
-    "hatch-vcs",
-]
-build-backend = "hatchling.build"
-
-[dependency-groups]
-dev = [
-    "pytest-cov>=7.0.0",
-    "tiktoken>=0.12.0",
-]
-
-[tool.hatch.build.targets.wheel]
-include = [
-    "packages/python_docs_init",
-]
-
-[tool.hatch.build.targets.wheel.sources]
-"packages/python_docs_init" = "python_docs_init"
-
-[tool.hatch.version]
-source = "vcs"
+license = { text = "Unlicense" }
 
 [tool.ruff]
 target-version = "py311"
@@ -217,22 +123,15 @@ mypy_path = []
 [tool.pyright]
 pythonVersion = "3.11"
 reportMissingTypeStubs = false
-include = [
-    "packages/python_docs_init/",
-]
-extraPaths = [
-    "packages/python_docs_init",
-    ".",
-]
 
 [tool.pytest.ini_options]
 addopts = [
-    "--cov=packages/python_docs_init",
+    "--cov=.",
     "--cov-report=term-missing",
     "-v",
 ]
 testpaths = [
-    "packages/python_docs_init/tests",
+    "tests",
 ]
 python_files = [
     "test_*.py",
@@ -243,51 +142,23 @@ python_classes = [
 python_functions = [
     "test_*",
 ]
-pythonpath = [
-    ".",
-    "packages/",
-]
-markers = [
-    "slow: tests that take significant time to run",
-    "integration: integration tests",
-]
 
 [tool.coverage.run]
-omit = []
+omit = [
+    "tests/*",
+    ".venv/*",
+]
 
 [tool.coverage.report]
 show_missing = true
 fail_under = 80
 
-[tool.semantic_release]
-version_toml = []
-major_on_zero = true
-allow_zero_version = true
-tag_format = "v{version}"
-build_command = "uv build"
-
-[tool.semantic_release.branches.main]
-match = "(main|master)"
-prerelease = false
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = [
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "feat",
-    "fix",
-    "perf",
-    "style",
-    "refactor",
-    "test",
-]
-minor_tags = [
-    "feat",
-]
-patch_tags = [
-    "fix",
-    "perf",
-    "refactor",
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pre-commit>=4.3.0",
+    "pyright>=1.1.407",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.2",
 ]
