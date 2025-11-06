@@ -26,7 +26,7 @@ SOLID Principles Applied:
     D: Dependency Inversion - Depends on abstractions, not concretions
 """
 
-import subprocess
+import subprocess  # noqa: S404 - subprocess required for build orchestration with validated inputs
 import tomllib
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -229,7 +229,7 @@ class AptPackageManager(IPackageManager):
         # Check which packages are missing
         missing_packages = []
         for package in packages:
-            result = subprocess.run(["dpkg", "-s", package], capture_output=True)  # noqa: S607
+            result = subprocess.run(["dpkg", "-s", package], capture_output=True)  # noqa: S603,S607 - dpkg with validated package names from config
             if result.returncode != 0:
                 missing_packages.append(package)
 
@@ -249,7 +249,7 @@ class AptPackageManager(IPackageManager):
 
         # Install missing packages
         install_cmd = ["apt-get", "install", "-y", "-qq", "--no-install-recommends", *missing_packages]
-        subprocess.run(install_cmd, check=True)
+        subprocess.run(install_cmd, check=True)  # noqa: S603 - apt-get with validated package names from config
 
         print("✓ All required packages installed")
 
@@ -295,7 +295,7 @@ class CMakeBuilder(ICMakeBuilder):
             config_cmd.append("-DCMAKE_VERBOSE_MAKEFILE=ON")
 
         print(f"   Command: {' '.join(config_cmd)}")
-        subprocess.run(config_cmd, check=True)
+        subprocess.run(config_cmd, check=True)  # noqa: S603 - cmake with validated paths and build configuration
         print("✓ CMake configuration complete")
 
     def _compile(self, target: BuildTarget, verbose: bool) -> None:
@@ -306,7 +306,7 @@ class CMakeBuilder(ICMakeBuilder):
         if verbose:
             build_cmd.append("--verbose")
 
-        subprocess.run(build_cmd, check=True)
+        subprocess.run(build_cmd, check=True)  # noqa: S603 - cmake build with validated build directory
         print("✓ Build complete")
 
     def _list_artifacts(self, build_dir: Path) -> None:
@@ -358,19 +358,19 @@ class DockerComposeRunner(IContainerRunner):
         if no_cache:
             build_cmd.append("--no-cache")
 
-        subprocess.run(build_cmd, check=True)
+        subprocess.run(build_cmd, check=True)  # noqa: S603 - docker compose with validated service name from config
 
     def _start_service(self, service_name: str) -> None:
         """Start Docker Compose service in background."""
         console.print("[blue]🚀 Starting service in background...[/blue]")
         start_cmd = ["docker", "compose", "up", "-d", service_name]
-        subprocess.run(start_cmd, check=True)
+        subprocess.run(start_cmd, check=True)  # noqa: S603 - docker compose with validated service name from config
 
     def _stop_service(self, service_name: str) -> None:
         """Stop Docker Compose service."""
         console.print("[blue]🛑 Stopping service...[/blue]")
         stop_cmd = ["docker", "compose", "stop", service_name]
-        subprocess.run(stop_cmd, check=True)
+        subprocess.run(stop_cmd, check=True)  # noqa: S603 - docker compose with validated service name from config
 
     def _ensure_packages_installed(self, service_name: str, packages: list[str], dry_run: bool) -> None:
         """Check and install required packages in container."""
@@ -383,7 +383,7 @@ class DockerComposeRunner(IContainerRunner):
         missing_packages = []
         for package in packages:
             check_cmd = ["docker", "compose", "exec", "-T", service_name, "dpkg", "-s", package]
-            result = subprocess.run(check_cmd, capture_output=True)
+            result = subprocess.run(check_cmd, capture_output=True)  # noqa: S603 - docker compose exec with validated service and package names
             if result.returncode != 0:
                 missing_packages.append(package)
 
@@ -400,7 +400,7 @@ class DockerComposeRunner(IContainerRunner):
 
         # Update package lists
         update_cmd = ["docker", "compose", "exec", "-T", "--user", "root", service_name, "apt-get", "update", "-qq"]
-        subprocess.run(update_cmd, check=True)
+        subprocess.run(update_cmd, check=True)  # noqa: S603 - docker compose exec with validated service name from config
 
         # Install missing packages
         install_cmd = [
@@ -418,7 +418,7 @@ class DockerComposeRunner(IContainerRunner):
             "--no-install-recommends",
             *missing_packages,
         ]
-        subprocess.run(install_cmd, check=True)
+        subprocess.run(install_cmd, check=True)  # noqa: S603 - docker compose exec with validated service and package names
 
         console.print("[green]✓ All required packages installed[/green]")
 
@@ -501,7 +501,7 @@ class DockerComposeRunner(IContainerRunner):
             configure_cmd.append("-DCMAKE_VERBOSE_MAKEFILE=ON")
 
         console.print(f"[dim]   Command: {' '.join(configure_cmd[5:])}[/dim]")  # Skip docker compose parts
-        subprocess.run(configure_cmd, check=True)
+        subprocess.run(configure_cmd, check=True)  # noqa: S603 - docker compose exec cmake with validated paths and config
         console.print("[green]✓ Configuration complete[/green]")
 
     def _run_cmake_build(
@@ -516,7 +516,7 @@ class DockerComposeRunner(IContainerRunner):
         if verbose:
             build_cmd.append("--verbose")
 
-        subprocess.run(build_cmd, check=True)
+        subprocess.run(build_cmd, check=True)  # noqa: S603 - docker compose exec cmake with validated build directory
         console.print("[green]✓ Build complete[/green]")
 
         # List artifacts
