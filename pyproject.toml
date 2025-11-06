@@ -120,7 +120,7 @@ pretty = true
 disable_error_code = "call-arg,arg-type"
 mypy_path = []
 
-[tool.pyright]
+[tool.basedpyright]
 pythonVersion = "3.11"
 reportMissingTypeStubs = false
 
@@ -157,8 +157,9 @@ fail_under = 80
 dev = [
     "mypy>=1.18.2",
     "pre-commit>=4.3.0",
-    "pyright>=1.1.407",
+    "basedpyright>=1.21.1",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.2",
+    "types-pyyaml>=6.0",
 ]
