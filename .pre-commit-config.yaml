@@ -1,6 +1,21 @@
-# Pre-commit configuration for Python Documentation Init
+# Pre-commit configuration for mkapidocs
 
 repos:
+  # Local hook for mkapidocs self-documentation
+  # This repo uses its own tool to manage its documentation
+  - repo: local
+    hooks:
+      - id: mkapidocs-regen
+        name: Regenerate documentation
+        description: Run mkapidocs setup to keep generated content in sync with code changes
+        entry: ./mkapidocs setup .
+        language: script
+        files: ^(.*\.py|pyproject\.toml|mkdocs\.yml)$
+        pass_filenames: false
+        verbose: true
+
+  # Standard pre-commit hooks managed by mxr
+
   - repo: https://github.com/mxr/sync-pre-commit-deps
     rev: v0.0.3
     hooks:
@@ -70,6 +85,12 @@ repos:
   # Local hooks for type checking
   - repo: local
     hooks:
+      - id: install-pep723-deps
+        name: Install PEP 723 script dependencies
+        entry: bash -c 'for file in "$@"; do if head -20 "$file" | grep -q "# /// script"; then uv export --script "$file" | uv pip install --quiet -r -; fi; done' --
+        language: system
+        types: [python]
+        pass_filenames: true
       - id: mypy
         name: mypy
         entry: uv run mypy
@@ -78,8 +99,8 @@ repos:
         pass_filenames: true
 
       - id: pyright
-        name: pyright
-        entry: uv run pyright
+        name: basedpyright
+        entry: uv run basedpyright
         language: system
         types: [python]
         pass_filenames: true

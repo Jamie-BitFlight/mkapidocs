@@ -74,3 +74,10 @@ uv.lock
 *.log
 *.tmp
 .cache/
+
+# Claude Code
+.claude/smells/
+
+# MkDocs build artifacts (docs/generated/ intentionally NOT ignored for version control)
+/site/
+.mkdocs_cache/

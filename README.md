@@ -1,4 +1,4 @@
-# Python Documentation Init
+# mkapidocs
 
 Automated documentation setup tool for Python projects using MkDocs and GitLab Pages.
 
@@ -6,7 +6,7 @@ This is a PEP 723 standalone script that sets up comprehensive MkDocs documentat
 
 ## What It Does
 
-python-docs-init automatically:
+mkapidocs automatically:
 
 - Detects project features (C/C++ code, Typer CLI, private registries)
 - Generates MkDocs configuration with Material theme
@@ -46,25 +46,25 @@ This is a PEP 723 standalone script that does not require installation. Simply d
 
 ```bash
 # Clone the repository
-git clone https://github.com/Jamie-BitFlight/python-docs-init.git
-cd python-docs-init
+git clone https://github.com/Jamie-BitFlight/mkapidocs.git
+cd mkapidocs
 
 # Make script executable (if needed)
-chmod +x python-docs-init
+chmod +x mkapidocs
 
 # Run from this directory
-./python-docs-init --help
+./mkapidocs --help
 ```
 
 Or download just the script:
 
 ```bash
 # Download the standalone script
-curl -O https://raw.githubusercontent.com/Jamie-BitFlight/python-docs-init/main/python-docs-init
-chmod +x python-docs-init
+curl -O https://raw.githubusercontent.com/Jamie-BitFlight/mkapidocs/main/mkapidocs
+chmod +x mkapidocs
 
 # Run from anywhere
-./python-docs-init --help
+./mkapidocs --help
 ```
 
 ## Usage
@@ -75,39 +75,48 @@ The script can be run from any location. The working directory does not matter -
 
 ```bash
 # Show help
-./python-docs-init --help
+./mkapidocs --help
 
 # Show version
-./python-docs-init version
+./mkapidocs version
 
 # Show package information
-./python-docs-init info
+./mkapidocs info
 ```
 
 ### Setting Up Documentation
 
-Initialize documentation for a Python project:
+Initialize or update documentation for a Python project:
 
 ```bash
 # Auto-detect GitLab Pages URL from git remote
-./python-docs-init setup /path/to/your/project
+./mkapidocs setup /path/to/your/project
 
 # Specify custom GitLab Pages base URL
-./python-docs-init setup /path/to/your/project --gitlab-url-base https://your-org.gitlab.io/group/
+./mkapidocs setup /path/to/your/project --gitlab-url-base https://your-org.gitlab.io/group/
 ```
 
 Example with real paths:
 
 ```bash
 # Setup docs for a project in your home directory
-./python-docs-init setup ~/repos/my-python-project
+./mkapidocs setup ~/repos/my-python-project
 
 # Setup docs for a project in the current directory
-./python-docs-init setup .
+./mkapidocs setup .
 
 # Setup docs with explicit GitLab URL
-./python-docs-init setup ~/repos/my-project --gitlab-url-base https://mycompany.gitlab.io/team/
+./mkapidocs setup ~/repos/my-project --gitlab-url-base https://mycompany.gitlab.io/team/
 ```
+
+**Important:** The `setup` command is non-destructive and safe to run multiple times:
+
+- **First run:** Creates all documentation files and infrastructure
+- **Subsequent runs:** Uses smart YAML merge to preserve your customizations
+- **Updates only:** Template-owned settings (plugin paths, core configuration)
+- **Preserves:** Your custom navigation, extra plugins, theme features, and additional configuration
+
+After running setup, you'll see a table showing exactly what was added, updated, or preserved.
 
 This command:
 
@@ -115,7 +124,7 @@ This command:
 2. Detects C/C++ code in source/ directory
 3. Detects Typer CLI dependency
 4. Detects private registry configuration
-5. Creates mkdocs.yml with all necessary plugins
+5. Creates or updates mkdocs.yml with all necessary plugins
 6. Creates docs/ directory with documentation pages
 7. Creates .gitlab/workflows/pages.gitlab-ci.yml for GitLab Pages
 8. Adds docstring linting rules to ruff configuration
@@ -126,26 +135,26 @@ Build static documentation site:
 
 ```bash
 # Build documentation (output to site/ directory)
-./python-docs-init build /path/to/your/project
+./mkapidocs build /path/to/your/project
 
 # Build with strict mode (warnings as errors)
-./python-docs-init build /path/to/your/project --strict
+./mkapidocs build /path/to/your/project --strict
 
 # Build to custom output directory
-./python-docs-init build /path/to/your/project --output-dir /path/to/output
+./mkapidocs build /path/to/your/project --output-dir /path/to/output
 ```
 
 Example:
 
 ```bash
 # Build docs for project in current directory
-./python-docs-init build .
+./mkapidocs build .
 
 # Build docs with strict checking
-./python-docs-init build ~/repos/my-project --strict
+./mkapidocs build ~/repos/my-project --strict
 
 # Build to custom directory
-./python-docs-init build ~/repos/my-project --output-dir ~/docs-build
+./mkapidocs build ~/repos/my-project --output-dir ~/docs-build
 ```
 
 ### Serving Documentation
@@ -154,23 +163,23 @@ Start local documentation server with live reload:
 
 ```bash
 # Serve on default address (127.0.0.1:8000)
-./python-docs-init serve /path/to/your/project
+./mkapidocs serve /path/to/your/project
 
 # Serve on custom host and port
-./python-docs-init serve /path/to/your/project --host 0.0.0.0 --port 8080
+./mkapidocs serve /path/to/your/project --host 0.0.0.0 --port 8080
 ```
 
 Example:
 
 ```bash
 # Serve docs locally
-./python-docs-init serve ~/repos/my-project
+./mkapidocs serve ~/repos/my-project
 
 # Access at http://127.0.0.1:8000
 # Press Ctrl+C to stop
 
 # Serve on all interfaces for network access
-./python-docs-init serve ~/repos/my-project --host 0.0.0.0 --port 9000
+./mkapidocs serve ~/repos/my-project --host 0.0.0.0 --port 9000
 ```
 
 ## How It Works
@@ -188,23 +197,28 @@ After running setup, your project will have:
 
 ```
 your-project/
-├── mkdocs.yml                    # MkDocs configuration
-├── gen_ref_pages.py              # Auto-generated API reference script
+├── mkdocs.yml                          # MkDocs configuration
 ├── docs/
-│   ├── index.md                  # Homepage
-│   ├── about.md                  # From README.md
-│   ├── install.md                # Installation guide
-│   ├── quick-start-guide.md      # Quick start
-│   ├── contributing.md           # Contributing guide
-│   ├── publishing.md             # Publishing guide
-│   └── reference/
-│       ├── python.md             # Python API reference
-│       ├── c.md                  # C API reference (if C code detected)
-│       └── cli.md                # CLI reference (if Typer detected)
+│   ├── index.md                        # Homepage (preserved on re-run)
+│   ├── about.md                        # Auto-generated from README.md
+│   ├── install.md                      # Installation guide (preserved on re-run)
+│   ├── quick-start-guide.md            # Quick start
+│   ├── contributing.md                 # Contributing guide
+│   ├── publishing.md                   # Publishing guide
+│   └── generated/                      # Auto-generated content (always regenerated)
+│       ├── gen_ref_pages.py            # API reference generation script
+│       ├── index-features.md           # Feature list
+│       ├── install-registry.md         # Private registry instructions (if detected)
+│       ├── python-api.md               # Python API reference
+│       ├── c-api.md                    # C API reference (if C code detected)
+│       └── cli-api.md                  # CLI reference (if Typer detected)
 └── .gitlab/
     └── workflows/
-        └── pages.gitlab-ci.yml   # GitLab Pages workflow
+        └── pages.gitlab-ci.yml         # GitLab Pages workflow
 ```
+
+**Preserved on re-run:** `index.md`, `install.md`, and user customizations in `mkdocs.yml`
+**Always regenerated:** Everything in `docs/generated/` directory
 
 ## Features Detected
 
@@ -244,18 +258,18 @@ The script configures MkDocs with:
 
 ```bash
 # 1. Download or clone the script
-git clone https://github.com/Jamie-BitFlight/python-docs-init.git
-cd python-docs-init
+git clone https://github.com/Jamie-BitFlight/mkapidocs.git
+cd mkapidocs
 
 # 2. Setup documentation for your project
-./python-docs-init setup ~/repos/my-awesome-project
+./mkapidocs setup ~/repos/my-awesome-project
 
 # 3. Preview locally
-./python-docs-init serve ~/repos/my-awesome-project
+./mkapidocs serve ~/repos/my-awesome-project
 # Visit http://127.0.0.1:8000
 
 # 4. Build for production
-./python-docs-init build ~/repos/my-awesome-project --strict
+./mkapidocs build ~/repos/my-awesome-project --strict
 
 # 5. Commit and push (GitLab Pages will auto-deploy)
 cd ~/repos/my-awesome-project
@@ -264,12 +278,61 @@ git commit -m "Add MkDocs documentation"
 git push
 ```
 
+## Pre-Commit Hook
+
+mkapidocs can automatically regenerate documentation on every commit using pre-commit hooks. This keeps your docs in sync with code changes without manual intervention.
+
+### Setup
+
+Add to your project's `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/Jamie-BitFlight/mkapidocs
+    rev: v1.0.0 # Use latest version tag
+    hooks:
+      - id: mkapidocs-regen
+```
+
+This hook:
+
+- Triggers when Python files, `pyproject.toml`, or `mkdocs.yml` change
+- Runs `mkapidocs setup` to regenerate documentation
+- Adds updated docs to the commit automatically
+- **Safe to run:** Uses smart merge to preserve your customizations
+
+### First Time Setup
+
+```bash
+# Install pre-commit if not already installed
+uv tool install pre-commit
+
+# Install the hooks
+pre-commit install
+
+# Test it
+pre-commit run --all-files
+```
+
+### What Happens on Commit
+
+When you commit changes to Python files:
+
+1. Pre-commit runs `mkapidocs setup`
+2. Detects project features (C code, Typer CLI, etc.)
+3. Regenerates `docs/generated/` content
+4. Updates mkdocs.yml if needed (preserving your customizations)
+5. Stages updated documentation files
+6. Commit proceeds with updated docs included
+
+**Note:** The hook ID is `mkapidocs-regen` for backward compatibility, but it runs the `setup` command (which is non-destructive).
+
 ## GitLab Pages Deployment
 
 After running setup and pushing to GitLab, the .gitlab/workflows/pages.gitlab-ci.yml workflow will:
 
 1. Install uv in a Python 3.11 container
-2. Run `uvx python-docs-init build . --strict`
+2. Run `uvx mkapidocs build . --strict`
 3. Move site/ to public/
 4. Deploy to GitLab Pages
 
@@ -281,9 +344,27 @@ The documentation will be available at:
 
 After setup, you can customize:
 
-- **mkdocs.yml**: Modify theme, plugins, navigation
-- **docs/** files: Edit generated documentation pages
-- **gen_ref_pages.py**: Customize API reference generation
+- **mkdocs.yml**: Modify theme, add plugins, customize navigation
+- **docs/** files: Edit or add documentation pages
+- **docs/generated/**: These files are always regenerated - don't edit manually
+
+### Safe to Re-run
+
+After customizing `mkdocs.yml`, you can safely run `setup` again:
+
+```bash
+./mkapidocs setup /path/to/your/project
+```
+
+The smart merge system will:
+
+- ✅ Preserve your custom navigation structure
+- ✅ Preserve your extra plugins and theme features
+- ✅ Preserve your additional configuration (`extra`, custom extensions, etc.)
+- ✅ Update only template-owned settings (plugin paths, core plugins)
+- ✅ Show you a table of what changed
+
+Your customizations are safe!
 
 ## Troubleshooting
 
@@ -291,7 +372,7 @@ After setup, you can customize:
 
 ```bash
 # Ensure script is executable
-chmod +x python-docs-init
+chmod +x mkapidocs
 
 # Check uv is installed
 uv --version
@@ -302,7 +383,7 @@ uv --version
 The build and serve commands require mkdocs.yml to exist. Run setup first:
 
 ```bash
-./python-docs-init setup /path/to/project
+./mkapidocs setup /path/to/project
 ```
 
 ### GitLab URL detection fails
@@ -311,7 +392,7 @@ If git remote is not configured or in unexpected format:
 
 ```bash
 # Provide explicit URL
-./python-docs-init setup /path/to/project --gitlab-url-base https://your-org.gitlab.io/group/
+./mkapidocs setup /path/to/project --gitlab-url-base https://your-org.gitlab.io/group/
 ```
 
 ### Module import errors during build
@@ -348,5 +429,5 @@ Unlicense
 
 ## Links
 
-- Repository: https://github.com/Jamie-BitFlight/python-docs-init
-- Issue Tracker: https://github.com/Jamie-BitFlight/python-docs-init/issues
+- Repository: https://github.com/Jamie-BitFlight/mkapidocs
+- Issue Tracker: https://github.com/Jamie-BitFlight/mkapidocs/issues

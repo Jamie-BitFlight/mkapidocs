@@ -9,9 +9,11 @@
 #     "pydantic>=2.12.2",
 #     "rich>=13.9.4",
 #     "httpx>=0.28.1",
+#     "pyyaml>=6.0",
+#     "types-pyyaml>=6.0",
 # ]
 # ///
-"""Python Documentation Init - Automated documentation setup for Python projects.
+"""mkapidocs - Automated documentation setup for Python projects.
 
 This script sets up MkDocs documentation for Python repositories with auto-detection
 of features like C/C++ code and Typer CLI interfaces.
@@ -36,6 +38,7 @@ from typing import Annotated, Any
 import httpx
 import tomli_w
 import typer
+import yaml
 from jinja2 import Environment
 from rich import box
 from rich.console import Console
@@ -90,7 +93,7 @@ plugins:
   - search
   - gen-files:
       scripts:
-        - docs/gen_ref_pages.py
+        - docs/generated/gen_ref_pages.py
   - literate-nav:
       nav_file: SUMMARY.md
   - mkdocstrings:
@@ -147,12 +150,12 @@ nav:
   - Getting Started:
     - Installation: install.md
   - API Reference:
-    - Python API: reference/python.md
+    - Python API: generated/python-api.md
 {% if has_c_code %}
-    - C API: reference/c.md
+    - C API: generated/c-api.md
 {% endif %}
 {% if has_typer %}
-    - CLI Reference: reference/cli.md
+    - CLI Reference: generated/cli-api.md
 {% endif %}
   - Repository Files: repository/SUMMARY.md
 """
@@ -174,44 +177,15 @@ INDEX_MD_TEMPLATE = """# {{ project_name }}
 
 {{ description }}
 
-## Documentation
+--8<-- "generated/index-features.md"
 
-- [Installation](install.md) - Detailed installation instructions
-- [API Reference](reference/python.md) - Python API documentation
-{% if has_c_code %}
-- [C API Reference](reference/c.md) - C/C++ API documentation
-{% endif %}
-{% if has_typer %}
-- [CLI Reference](reference/cli.md) - Command-line interface
-{% endif %}
-
-## Features
-
-- **Easy Integration** - Simple Python API for quick integration into your projects
-- **Comprehensive Documentation** - Complete API reference and practical examples
-{% if has_typer %}
-- **Command-Line Interface** - Full-featured CLI for common operations
-{% endif %}
-{% if has_c_code %}
-- **High Performance** - Optimized C/C++ extensions for computationally intensive tasks
-{% endif %}
-- **Error Handling** - Clear error messages and exception handling
-- **Cross-Platform Support** - Works on Linux, macOS, and Windows
-- **Active Development** - Regular updates and community support
-
-## Quick Install
-
-{% if has_private_registry %}
-Since {{ project_name }} is in a private registry:
+## Quick Start
 
 ```bash
-uv add --index="{{ private_registry_url }}" {{ project_name }}
+uv pip install {{ project_name }}
 ```
-{% else %}
-```bash
-uv add {{ project_name }}
-```
-{% endif %}
+
+--8<-- "generated/install-registry.md"
 
 For detailed installation instructions, see the [Installation Guide](install.md).
 
@@ -465,9 +439,9 @@ uv remove {{ project_name }}
 
 ## Next Steps
 
-- [API Reference](reference/python.md) - Explore the API documentation
+- [API Reference](generated/python-api.md) - Explore the API documentation
 {% if has_typer %}
-- [CLI Reference](reference/cli.md) - Command-line interface documentation
+- [CLI Reference](generated/cli-api.md) - Command-line interface documentation
 {% endif %}
 """
 
@@ -536,9 +510,7 @@ class DoxygenInstaller:
             return False, None
 
         try:
-            result = subprocess.run(
-                [doxygen_path, "--version"], capture_output=True, text=True, check=True, timeout=5
-            )
+            result = subprocess.run([doxygen_path, "--version"], capture_output=True, text=True, check=True, timeout=5)
             version = result.stdout.strip()
             return True, version
         except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -697,29 +669,15 @@ class SystemValidator:
         """
         git_path = which("git")
         if not git_path:
-            return ValidationResult(
-                check_name="Git",
-                passed=False,
-                message="Not found - install git",
-                required=True,
-            )
+            return ValidationResult(check_name="Git", passed=False, message="Not found - install git", required=True)
 
         try:
             result = subprocess.run([git_path, "--version"], capture_output=True, text=True, check=True, timeout=5)
             version = result.stdout.strip().replace("git version ", "")
-            return ValidationResult(
-                check_name="Git",
-                passed=True,
-                message="Installed",
-                value=version,
-                required=True,
-            )
+            return ValidationResult(check_name="Git", passed=True, message="Installed", value=version, required=True)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return ValidationResult(
-                check_name="Git",
-                passed=False,
-                message="Found but version check failed",
-                required=True,
+                check_name="Git", passed=False, message="Found but version check failed", required=True
             )
 
     @staticmethod
@@ -741,19 +699,10 @@ class SystemValidator:
         try:
             result = subprocess.run([uvx_path, "--version"], capture_output=True, text=True, check=True, timeout=5)
             version = result.stdout.strip().replace("uvx ", "")
-            return ValidationResult(
-                check_name="uv/uvx",
-                passed=True,
-                message="Installed",
-                value=version,
-                required=True,
-            )
+            return ValidationResult(check_name="uv/uvx", passed=True, message="Installed", value=version, required=True)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return ValidationResult(
-                check_name="uv/uvx",
-                passed=False,
-                message="Found but version check failed",
-                required=True,
+                check_name="uv/uvx", passed=False, message="Found but version check failed", required=True
             )
 
     @staticmethod
@@ -767,11 +716,7 @@ class SystemValidator:
 
         if is_installed:
             return ValidationResult(
-                check_name="Doxygen",
-                passed=True,
-                message="Installed",
-                value=version,
-                required=False,
+                check_name="Doxygen", passed=True, message="Installed", value=version, required=False
             )
 
         return ValidationResult(
@@ -801,10 +746,7 @@ class ProjectValidator:
         """
         if not self.repo_path.exists():
             return ValidationResult(
-                check_name="Path exists",
-                passed=False,
-                message=f"Path does not exist: {self.repo_path}",
-                required=True,
+                check_name="Path exists", passed=False, message=f"Path does not exist: {self.repo_path}", required=True
             )
 
         if not self.repo_path.is_dir():
@@ -815,12 +757,7 @@ class ProjectValidator:
                 required=True,
             )
 
-        return ValidationResult(
-            check_name="Path exists",
-            passed=True,
-            message="Valid directory",
-            required=True,
-        )
+        return ValidationResult(check_name="Path exists", passed=True, message="Valid directory", required=True)
 
     def check_git_repository(self) -> ValidationResult:
         """Check if path is a git repository.
@@ -837,12 +774,7 @@ class ProjectValidator:
                 required=True,
             )
 
-        return ValidationResult(
-            check_name="Git repository",
-            passed=True,
-            message="Valid git repository",
-            required=True,
-        )
+        return ValidationResult(check_name="Git repository", passed=True, message="Valid git repository", required=True)
 
     def check_pyproject_toml(self) -> ValidationResult:
         """Check if pyproject.toml exists.
@@ -852,29 +784,16 @@ class ProjectValidator:
         """
         pyproject_path = self.repo_path / "pyproject.toml"
         if not pyproject_path.exists():
-            return ValidationResult(
-                check_name="pyproject.toml",
-                passed=False,
-                message="File not found",
-                required=True,
-            )
+            return ValidationResult(check_name="pyproject.toml", passed=False, message="File not found", required=True)
 
         # Try to parse it
         try:
             with open(pyproject_path, "rb") as f:
                 tomllib.load(f)
-            return ValidationResult(
-                check_name="pyproject.toml",
-                passed=True,
-                message="Valid TOML file",
-                required=True,
-            )
+            return ValidationResult(check_name="pyproject.toml", passed=True, message="Valid TOML file", required=True)
         except Exception as e:
             return ValidationResult(
-                check_name="pyproject.toml",
-                passed=False,
-                message=f"Invalid TOML: {e}",
-                required=True,
+                check_name="pyproject.toml", passed=False, message=f"Invalid TOML: {e}", required=True
             )
 
     def check_c_code(self) -> ValidationResult:
@@ -895,11 +814,7 @@ class ProjectValidator:
             )
 
         return ValidationResult(
-            check_name="C/C++ code",
-            passed=True,
-            message="Not found",
-            value="Doxygen not needed",
-            required=False,
+            check_name="C/C++ code", passed=True, message="Not found", value="Doxygen not needed", required=False
         )
 
     def check_typer_dependency(self) -> ValidationResult:
@@ -914,24 +829,13 @@ class ProjectValidator:
 
             if has_typer:
                 return ValidationResult(
-                    check_name="Typer dependency",
-                    passed=True,
-                    message="Found in dependencies",
-                    required=False,
+                    check_name="Typer dependency", passed=True, message="Found in dependencies", required=False
                 )
 
-            return ValidationResult(
-                check_name="Typer dependency",
-                passed=True,
-                message="Not found",
-                required=False,
-            )
+            return ValidationResult(check_name="Typer dependency", passed=True, message="Not found", required=False)
         except Exception as e:
             return ValidationResult(
-                check_name="Typer dependency",
-                passed=False,
-                message=f"Could not check: {e}",
-                required=False,
+                check_name="Typer dependency", passed=False, message=f"Could not check: {e}", required=False
             )
 
     def check_mkdocs_yml(self) -> ValidationResult:
@@ -943,18 +847,10 @@ class ProjectValidator:
         mkdocs_path = self.repo_path / "mkdocs.yml"
         if not mkdocs_path.exists():
             return ValidationResult(
-                check_name="mkdocs.yml",
-                passed=False,
-                message="File not found - run setup command first",
-                required=True,
+                check_name="mkdocs.yml", passed=False, message="File not found - run setup command first", required=True
             )
 
-        return ValidationResult(
-            check_name="mkdocs.yml",
-            passed=True,
-            message="Found",
-            required=True,
-        )
+        return ValidationResult(check_name="mkdocs.yml", passed=True, message="Found", required=True)
 
 
 # ============================================================================
@@ -1011,12 +907,7 @@ def display_validation_results(results: list[ValidationResult], title: str = "En
         results: List of validation results
         title: Table title
     """
-    table = Table(
-        title=f":mag: {title}",
-        box=box.MINIMAL_DOUBLE_HEAD,
-        title_style="bold cyan",
-        show_header=True,
-    )
+    table = Table(title=f":mag: {title}", box=box.MINIMAL_DOUBLE_HEAD, title_style="bold cyan", show_header=True)
 
     table.add_column("Check", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center", no_wrap=True)
@@ -1103,9 +994,7 @@ def validate_environment(
                     console.print(f"\n[green]:white_check_mark: {message}[/green]\n")
                 else:
                     console.print(f"\n[yellow]:warning: {message}[/yellow]\n")
-                    console.print(
-                        "[yellow]Documentation will be generated without C/C++ API reference.[/yellow]\n"
-                    )
+                    console.print("[yellow]Documentation will be generated without C/C++ API reference.[/yellow]\n")
 
     # Check if all required checks passed
     all_required_passed = all(r.passed or not r.required for r in results)
@@ -1404,8 +1293,286 @@ def update_ruff_config(pyproject: dict[str, Any]) -> dict[str, Any]:
     return pyproject
 
 
+# ============================================================================
+# YAML Merge Infrastructure
+# ============================================================================
+
+
+@dataclass
+class FileChange:
+    """Record of a change made to a configuration file.
+
+    Attributes:
+        key_path: Dot-separated path to the key (e.g., "theme.name")
+        action: Type of change (updated, added, preserved)
+        old_value: Previous value (None if newly added)
+        new_value: New value (None if preserved)
+    """
+
+    key_path: str
+    action: str  # "updated", "added", "preserved"
+    old_value: str | None = None
+    new_value: str | None = None
+
+
+def _display_file_changes(file_path: Path, changes: list[FileChange]) -> None:
+    """Display a Rich table showing changes made to a configuration file.
+
+    Args:
+        file_path: Path to the file that was modified
+        changes: List of FileChange records
+    """
+    if not changes:
+        return
+
+    table = Table(
+        title=f":page_facing_up: Changes to {file_path.name}",
+        box=box.MINIMAL_DOUBLE_HEAD,
+        title_style="bold blue",
+    )
+
+    table.add_column("Key", style="cyan", no_wrap=True)
+    table.add_column("Action", justify="center", no_wrap=True)
+    table.add_column("Old Value", style="dim")
+    table.add_column("New Value", style="green")
+
+    for change in changes:
+        # Format action with emoji
+        if change.action == "updated":
+            action_display = "[green]:white_check_mark:[/green] Updated"
+        elif change.action == "added":
+            action_display = "[green]:white_check_mark:[/green] Added"
+        elif change.action == "preserved":
+            action_display = "[yellow]:black_circle:[/yellow] Preserved"
+        else:
+            action_display = change.action
+
+        # Format values
+        old_val = str(change.old_value) if change.old_value is not None else ""
+        new_val = str(change.new_value) if change.new_value is not None else ""
+
+        # Truncate long values
+        if len(old_val) > 50:
+            old_val = old_val[:47] + "..."
+        if len(new_val) > 50:
+            new_val = new_val[:47] + "..."
+
+        table.add_row(change.key_path, action_display, old_val, new_val)
+
+    console.print(table)
+
+
+def _merge_yaml_configs(
+    existing_yaml: dict[str, Any],
+    template_yaml: dict[str, Any],
+    template_owned_keys: set[str],
+    key_prefix: str = "",
+    depth: int = 0,
+    max_depth: int = 50,
+) -> tuple[dict[str, Any], list[FileChange]]:
+    """Recursively merge YAML configurations, preserving user customizations.
+
+    Args:
+        existing_yaml: Current YAML content from file
+        template_yaml: New YAML content from template
+        template_owned_keys: Set of key paths that template always controls
+        key_prefix: Current key path for recursion (dot-separated)
+        depth: Current recursion depth (internal parameter)
+        max_depth: Maximum nesting depth to prevent stack overflow
+
+    Returns:
+        Tuple of (merged_yaml, list_of_changes)
+
+    Raises:
+        CLIError: If YAML structure conflicts prevent clean merge or depth exceeds limit
+    """
+    # Check recursion depth to prevent stack overflow
+    if depth > max_depth:
+        msg = (
+            f"YAML structure exceeds maximum nesting depth ({max_depth}). "
+            f"This may indicate a malformed configuration file or circular references."
+        )
+        raise CLIError(msg)
+
+    merged: dict[str, Any] = {}
+    changes: list[FileChange] = []
+
+    # First, handle all template keys
+    for key, template_value in template_yaml.items():
+        current_path = f"{key_prefix}.{key}" if key_prefix else key
+        existing_value = existing_yaml.get(key)
+
+        # Check if this key is template-owned
+        is_template_owned = any(
+            current_path == owned_key or current_path.startswith(owned_key + ".")
+            for owned_key in template_owned_keys
+        )
+
+        if is_template_owned:
+            # Template controls this key - always update
+            merged[key] = template_value
+            if existing_value != template_value:
+                if existing_value is None:
+                    changes.append(FileChange(key_path=current_path, action="added", new_value=str(template_value)))
+                else:
+                    changes.append(
+                        FileChange(
+                            key_path=current_path,
+                            action="updated",
+                            old_value=str(existing_value),
+                            new_value=str(template_value),
+                        )
+                    )
+        elif isinstance(template_value, dict) and isinstance(existing_value, dict):
+            # Recursively merge nested dicts
+            merged_nested, nested_changes = _merge_yaml_configs(
+                existing_value, template_value, template_owned_keys, current_path, depth + 1, max_depth
+            )
+            merged[key] = merged_nested
+            changes.extend(nested_changes)
+        elif existing_value is not None:
+            # User has customized this - preserve it
+            merged[key] = existing_value
+            changes.append(
+                FileChange(key_path=current_path, action="preserved", old_value=str(existing_value), new_value=None)
+            )
+        else:
+            # New key from template, not template-owned
+            merged[key] = template_value
+            changes.append(FileChange(key_path=current_path, action="added", new_value=str(template_value)))
+
+    # Now handle existing keys not in template (user additions)
+    for key, existing_value in existing_yaml.items():
+        if key not in merged:
+            current_path = f"{key_prefix}.{key}" if key_prefix else key
+            merged[key] = existing_value
+            changes.append(
+                FileChange(key_path=current_path, action="preserved", old_value=str(existing_value), new_value=None)
+            )
+
+    return merged, changes
+
+
+def _merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, list[FileChange]]:
+    """Merge existing mkdocs.yml with template, preserving user customizations.
+
+    Args:
+        existing_path: Path to existing mkdocs.yml
+        template_content: Rendered template content
+
+    Returns:
+        Tuple of (merged_yaml_string, list_of_changes)
+
+    Raises:
+        CLIError: If YAML parsing fails or merge conflicts occur
+    """
+    # Check if existing file contains Python-specific YAML tags
+    # If so, we cannot safely parse and merge - must overwrite
+    existing_text = existing_path.read_text()
+    existing_has_python_tags = "!!python/name:" in existing_text
+
+    if existing_has_python_tags:
+        # Cannot merge YAML with Python tags in existing file - just overwrite
+        console.print(
+            f"[yellow]Note: Existing {existing_path.name} contains Python-specific YAML tags.[/yellow]"
+        )
+        console.print("[yellow]Overwriting with template (user customizations may be lost).[/yellow]")
+        return template_content, [FileChange(key_path="entire_file", action="updated", old_value="(cannot parse)", new_value="(template)")]
+
+    try:
+        existing_yaml = yaml.safe_load(existing_text)
+    except yaml.YAMLError as e:
+        msg = f"Failed to parse existing {existing_path.name}: {e}"
+        raise CLIError(msg) from e
+
+    # Parse template - for Python tags, replace them with placeholders for structural parsing
+    template_for_parsing = template_content
+    if "!!python/name:" in template_content:
+        # Replace Python tags with placeholders for parsing structure
+        import re
+        template_for_parsing = re.sub(r'!!python/name:\S+', '"__PYTHON_TAG_PLACEHOLDER__"', template_content)
+
+    try:
+        template_yaml = yaml.safe_load(template_for_parsing)
+    except yaml.YAMLError as e:
+        msg = f"Failed to parse template YAML: {e}"
+        raise CLIError(msg) from e
+
+    # Define template-owned keys for mkdocs.yml
+    template_owned_keys = {
+        "plugins.gen-files.scripts",
+        "plugins.search",
+        "plugins.mkdocstrings",
+        "plugins.mermaid2",
+        "plugins.termynal",
+        "plugins.recently-updated",
+        "plugins.literate-nav",
+        "theme.name",
+        "theme.palette",
+        "markdown_extensions",
+    }
+
+    # Add site_url and repo_url if template provides them
+    if template_yaml.get("site_url"):
+        template_owned_keys.add("site_url")
+    if template_yaml.get("repo_url"):
+        template_owned_keys.add("repo_url")
+
+    merged_yaml, changes = _merge_yaml_configs(existing_yaml, template_yaml, template_owned_keys)
+
+    # Convert back to YAML string - use unsafe dump to preserve Python tags
+    merged_content = yaml.dump(merged_yaml, default_flow_style=False, sort_keys=False, allow_unicode=True, Dumper=yaml.Dumper)
+
+    return merged_content, changes
+
+
+def _merge_gitlab_ci_yaml(existing_path: Path, template_content: str) -> tuple[str, list[FileChange]]:
+    """Merge existing GitLab CI config with template, preserving user customizations.
+
+    Args:
+        existing_path: Path to existing pages.gitlab-ci.yml
+        template_content: Rendered template content
+
+    Returns:
+        Tuple of (merged_yaml_string, list_of_changes)
+
+    Raises:
+        CLIError: If YAML parsing fails or merge conflicts occur
+    """
+    try:
+        existing_yaml = yaml.safe_load(existing_path.read_text())
+    except yaml.YAMLError as e:
+        msg = f"Failed to parse existing {existing_path.name}: {e}"
+        raise CLIError(msg) from e
+
+    try:
+        template_yaml = yaml.safe_load(template_content)
+    except yaml.YAMLError as e:
+        msg = f"Failed to parse template YAML: {e}"
+        raise CLIError(msg) from e
+
+    # Define template-owned keys for GitLab CI
+    template_owned_keys = {
+        "pages.image",
+        "pages.stage",
+        "pages.script",
+        "pages.artifacts.paths",
+        "pages.rules",
+    }
+
+    merged_yaml, changes = _merge_yaml_configs(existing_yaml, template_yaml, template_owned_keys)
+
+    # Convert back to YAML string
+    merged_content = yaml.dump(merged_yaml, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    return merged_content, changes
+
+
 def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_c_code: bool, has_typer: bool) -> None:
-    """Create mkdocs.yml configuration file.
+    """Create or update mkdocs.yml configuration file.
+
+    If the file exists, performs a smart merge that preserves user customizations
+    while updating template-owned keys. If the file doesn't exist, creates it fresh.
 
     Args:
         repo_path: Path to repository.
@@ -1413,6 +1580,9 @@ def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_
         site_url: Full URL for GitLab Pages site.
         has_c_code: Whether repository contains C/C++ code.
         has_typer: Whether repository uses Typer.
+
+    Raises:
+        CLIError: If existing YAML cannot be parsed or merge fails
     """
     env = Environment()
     template = env.from_string(MKDOCS_YML_TEMPLATE)
@@ -1420,14 +1590,29 @@ def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_
     content = template.render(project_name=project_name, site_url=site_url, has_c_code=has_c_code, has_typer=has_typer)
 
     mkdocs_path = repo_path / "mkdocs.yml"
-    mkdocs_path.write_text(content)
+
+    if mkdocs_path.exists():
+        # File exists - perform smart merge
+        merged_content, changes = _merge_mkdocs_yaml(mkdocs_path, content)
+        mkdocs_path.write_text(merged_content)
+        _display_file_changes(mkdocs_path, changes)
+    else:
+        # New file - create fresh
+        mkdocs_path.write_text(content)
+        console.print(f"[green]:white_check_mark:[/green] Created {mkdocs_path.name}")
 
 
 def create_gitlab_ci(repo_path: Path) -> None:
     """Create or update .gitlab/workflows/pages.gitlab-ci.yml.
 
+    If the file exists, performs a smart merge that preserves user customizations
+    while updating template-owned keys. If the file doesn't exist, creates it fresh.
+
     Args:
         repo_path: Path to repository.
+
+    Raises:
+        CLIError: If existing YAML cannot be parsed or merge fails
     """
     gitlab_dir = repo_path / ".gitlab" / "workflows"
     gitlab_dir.mkdir(parents=True, exist_ok=True)
@@ -1437,7 +1622,16 @@ def create_gitlab_ci(repo_path: Path) -> None:
     content = template.render()
 
     ci_path = gitlab_dir / "pages.gitlab-ci.yml"
-    ci_path.write_text(content)
+
+    if ci_path.exists():
+        # File exists - perform smart merge
+        merged_content, changes = _merge_gitlab_ci_yaml(ci_path, content)
+        ci_path.write_text(merged_content)
+        _display_file_changes(ci_path, changes)
+    else:
+        # New file - create fresh
+        ci_path.write_text(content)
+        console.print(f"[green]:white_check_mark:[/green] Created {ci_path.name}")
 
 
 def create_index_page(
@@ -1452,6 +1646,8 @@ def create_index_page(
 ) -> None:
     """Create docs/index.md homepage.
 
+    Only creates if doesn't exist - preserves user customizations.
+
     Args:
         repo_path: Path to repository.
         project_name: Name of the project.
@@ -1464,6 +1660,13 @@ def create_index_page(
     """
     docs_dir = repo_path / "docs"
     docs_dir.mkdir(exist_ok=True)
+
+    index_path = docs_dir / "index.md"
+
+    # Only create if doesn't exist - preserve user customizations
+    if index_path.exists():
+        console.print(f"[yellow]  Preserving existing {index_path.name}[/yellow]")
+        return
 
     env = Environment()
     template = env.from_string(INDEX_MD_TEMPLATE)
@@ -1478,13 +1681,10 @@ def create_index_page(
         private_registry_url=private_registry_url,
     )
 
-    index_path = docs_dir / "index.md"
     index_path.write_text(content)
 
 
-def create_api_reference(
-    repo_path: Path, project_name: str, has_c_code: bool, cli_module: str | None = None
-) -> None:
+def create_api_reference(repo_path: Path, project_name: str, has_c_code: bool, cli_module: str | None = None) -> None:
     """Create API reference documentation pages.
 
     Args:
@@ -1493,8 +1693,8 @@ def create_api_reference(
         has_c_code: Whether repository contains C/C++ code.
         cli_module: Detected CLI module path (e.g., "package.cli"), or None if no CLI detected.
     """
-    reference_dir = repo_path / "docs" / "reference"
-    reference_dir.mkdir(parents=True, exist_ok=True)
+    generated_dir = repo_path / "docs" / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
 
     env = Environment()
     package_name = project_name.replace("-", "_")
@@ -1502,36 +1702,19 @@ def create_api_reference(
     # Python API
     python_template = env.from_string(PYTHON_API_MD_TEMPLATE)
     python_content = python_template.render(package_name=package_name)
-    (reference_dir / "python.md").write_text(python_content)
+    (generated_dir / "python-api.md").write_text(python_content)
 
     # C API
     if has_c_code:
         c_template = env.from_string(C_API_MD_TEMPLATE)
         c_content = c_template.render(project_name=project_name)
-        (reference_dir / "c.md").write_text(c_content)
+        (generated_dir / "c-api.md").write_text(c_content)
 
     # CLI - only create if CLI module was detected
     if cli_module:
         cli_template = env.from_string(CLI_MD_TEMPLATE)
         cli_content = cli_template.render(project_name=project_name, package_name=package_name, cli_module=cli_module)
-        (reference_dir / "cli.md").write_text(cli_content)
-
-
-def create_about_page(repo_path: Path) -> None:
-    """Copy README.md to docs/about.md if README exists.
-
-    Args:
-        repo_path: Path to repository.
-    """
-    readme_path = repo_path / "README.md"
-    if not readme_path.exists():
-        return
-
-    docs_dir = repo_path / "docs"
-    docs_dir.mkdir(exist_ok=True)
-
-    about_path = docs_dir / "about.md"
-    about_path.write_text(readme_path.read_text())
+        (generated_dir / "cli-api.md").write_text(cli_content)
 
 
 def create_gen_files_script(repo_path: Path) -> None:
@@ -1540,21 +1723,80 @@ def create_gen_files_script(repo_path: Path) -> None:
     Args:
         repo_path: Path to repository.
     """
-    target_script = repo_path / "docs" / "gen_ref_pages.py"
+    target_script = repo_path / "docs" / "generated" / "gen_ref_pages.py"
+    target_script.parent.mkdir(parents=True, exist_ok=True)
     target_script.write_text(GEN_REF_PAGES_PY)
 
 
-def update_gitignore(repo_path: Path) -> None:
-    """Update .gitignore to exclude MkDocs generated files.
+def create_generated_content(
+    repo_path: Path,
+    project_name: str,
+    has_c_code: bool,
+    has_typer: bool,
+    has_private_registry: bool,
+    private_registry_url: str | None,
+) -> None:
+    """Create generated content snippets for inclusion in user docs.
 
-    Adds /site/, .mkdocs_cache/, and docs/gen_ref_pages.py entries if they are not already present,
-    preserving existing content and formatting.
+    These files are regenerated on every setup and git-ignored.
 
     Args:
         repo_path: Path to repository.
+        project_name: Name of the project.
+        has_c_code: Whether repository contains C/C++ code.
+        has_typer: Whether repository uses Typer.
+        has_private_registry: Whether project uses private registry.
+        private_registry_url: URL of private registry if configured.
+    """
+    generated_dir = repo_path / "docs" / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+
+    # index-features.md
+    features = []
+    features.append("## Key Features\n")
+    features.append("- **[Python API Reference](python-api.md)** - Complete API documentation")
+
+    if has_typer:
+        features.append("- **[CLI Reference](cli-api.md)** - Command-line interface")
+
+    if has_c_code:
+        features.append("- **[C API Reference](c-api.md)** - C/C++ API documentation")
+
+    features_content = "\n".join(features) + "\n"
+    (generated_dir / "index-features.md").write_text(features_content)
+
+    # install-registry.md
+    if has_private_registry and private_registry_url:
+        registry_content = f"""## Private Registry
+
+This package is published to a private registry:
+
+```bash
+uv pip install {project_name} --index-url {private_registry_url}
+```
+"""
+    else:
+        registry_content = ""
+
+    (generated_dir / "install-registry.md").write_text(registry_content)
+
+
+def update_gitignore(repo_path: Path, include_generated: bool = False) -> None:
+    """Update .gitignore to exclude MkDocs build artifacts.
+
+    Adds /site/ and .mkdocs_cache/ entries if they are not already present.
+    Optionally includes docs/generated/ to .gitignore.
+
+    Args:
+        repo_path: Path to repository.
+        include_generated: Whether to add docs/generated/ to gitignore.
     """
     gitignore_path = repo_path / ".gitignore"
-    entries_to_add = ["/site/", ".mkdocs_cache/", "docs/gen_ref_pages.py"]
+    entries_to_add = ["/site/", ".mkdocs_cache/"]
+
+    # Only include docs/generated/ if explicitly requested (backward compatibility for setup)
+    if include_generated:
+        entries_to_add.append("docs/generated/")
 
     # Read existing content or start with empty string
     if gitignore_path.exists():
@@ -1641,10 +1883,14 @@ def create_supporting_docs(
         "private_registry_url": private_registry_url,
     }
 
-    # Create install.md
-    install_template = env.from_string(INSTALL_MD_TEMPLATE)
-    install_content = install_template.render(**template_context)
-    (docs_dir / "install.md").write_text(install_content)
+    # Create install.md (only if doesn't exist - preserve user customizations)
+    install_path = docs_dir / "install.md"
+    if not install_path.exists():
+        install_template = env.from_string(INSTALL_MD_TEMPLATE)
+        install_content = install_template.render(**template_context)
+        install_path.write_text(install_content)
+    else:
+        console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
 
 
 def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> None:
@@ -1714,6 +1960,9 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
         private_registry_url,
     )
     create_api_reference(repo_path, project_name, has_c_code, cli_module)
+    create_generated_content(
+        repo_path, project_name, has_c_code, has_typer_cli, has_private_registry, private_registry_url
+    )
     create_supporting_docs(repo_path, project_name, pyproject, has_c_code, has_typer_cli, site_url)
     update_gitignore(repo_path)
 
@@ -1917,7 +2166,7 @@ def serve_docs(target_path: Path, host: str = "127.0.0.1", port: int = 8000) -> 
 def version() -> None:
     """Show version information."""
     display_message(
-        "[bold cyan]Python Documentation Init[/bold cyan] version [bold green]1.0.0[/bold green]",
+        "[bold cyan]mkapidocs[/bold cyan] version [bold green]1.0.0[/bold green]",
         MessageType.INFO,
         title="Version Information",
     )
@@ -1939,11 +2188,7 @@ def info() -> None:
 @app.command()
 def setup(
     repo_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to Python repository to set up documentation for",
-            resolve_path=True,
-        ),
+        Path, typer.Argument(help="Path to Python repository to set up documentation for", resolve_path=True)
     ],
     gitlab_url_base: Annotated[
         str | None,
@@ -2008,11 +2253,7 @@ def setup(
 @app.command()
 def build(
     repo_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to Python repository to build documentation for",
-            resolve_path=True,
-        ),
+        Path, typer.Argument(help="Path to Python repository to build documentation for", resolve_path=True)
     ],
     strict: Annotated[
         bool, typer.Option("--strict", help="Enable strict mode (warnings as errors)", rich_help_panel="Build Options")
@@ -2080,11 +2321,7 @@ def build(
 @app.command()
 def serve(
     repo_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to Python repository to serve documentation for",
-            resolve_path=True,
-        ),
+        Path, typer.Argument(help="Path to Python repository to serve documentation for", resolve_path=True)
     ],
     host: Annotated[
         str, typer.Option("--host", help="Server host address", rich_help_panel="Server Options")
@@ -2147,7 +2384,7 @@ def serve(
 def main(
     ctx: typer.Context, verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose output")] = False
 ) -> None:
-    """Python Documentation Init - Automated documentation setup tool."""
+    """mkapidocs - Automated documentation setup tool."""
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
         raise typer.Exit(0)

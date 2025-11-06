@@ -1,0 +1,24 @@
+---
+# Pre-commit hook configuration for mkapidocs
+#
+# Usage:
+#   Add to your repository's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/Jamie-BitFlight/mkapidocs
+#       rev: v1.0.0
+#       hooks:
+#         - id: mkapidocs-regen
+#
+# This hook regenerates auto-generated documentation files before each commit,
+# ensuring documentation stays in sync with code changes.
+
+- id: mkapidocs-regen
+  name: Regenerate documentation
+  description: Run documentation setup to keep generated content in sync with code changes
+  entry: ./mkapidocs setup
+  language: script
+  files: ^(.*\.py|pyproject\.toml|mkdocs\.yml)$
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
