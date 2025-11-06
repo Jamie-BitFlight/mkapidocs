@@ -1,0 +1,557 @@
+"""Tests for feature detection functions in mkapidocs script.
+
+Tests cover:
+- Git remote URL parsing for GitHub Pages
+- C/C++ code detection
+- Typer dependency detection
+- Typer CLI module detection via AST parsing
+- Private registry detection from pyproject.toml
+"""
+
+from __future__ import annotations
+
+# Import functions from the mkapidocs script (PEP 723 standalone)
+# Use importlib.machinery for loading scripts without .py extension
+import importlib.machinery
+import importlib.util
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+from pytest_mock import MockerFixture
+
+script_path = Path(__file__).parent.parent / "mkapidocs"
+
+# Load the mkapidocs script using SourceFileLoader which handles files without .py
+loader = importlib.machinery.SourceFileLoader("mkapidocs", str(script_path))
+spec = importlib.util.spec_from_loader("mkapidocs", loader)
+
+if spec is None:
+    raise ImportError(f"Could not create module spec for {script_path}")
+
+mkapidocs = importlib.util.module_from_spec(spec)
+sys.modules["mkapidocs"] = mkapidocs
+
+try:
+    loader.exec_module(mkapidocs)
+except Exception as e:
+    # If direct import fails, provide helpful error message
+    raise ImportError(
+        f"Could not import mkapidocs: {e}\n"
+        "Ensure all script dependencies are installed in dev environment"
+    ) from e
+
+# Extract functions we want to test
+detect_github_url_base = mkapidocs.detect_github_url_base
+detect_c_code = mkapidocs.detect_c_code
+detect_typer_dependency = mkapidocs.detect_typer_dependency
+detect_typer_cli_module = mkapidocs.detect_typer_cli_module
+detect_private_registry = mkapidocs.detect_private_registry
+get_git_remote_url = mkapidocs.get_git_remote_url
+
+
+class TestGitHubURLDetection:
+    """Test suite for GitHub Pages URL detection from git remotes.
+
+    Tests the detect_github_url_base function which parses git remote URLs
+    to determine the GitHub Pages site URL.
+    """
+
+    def test_detect_github_url_ssh_format(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+        """Test GitHub URL detection with SSH remote format.
+
+        Tests: detect_github_url_base parses SSH git URLs correctly
+        How: Mock subprocess to return SSH format git URL
+        Why: GitHub SSH remotes are common, must parse to Pages URL
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mocker: pytest-mock fixture
+        """
+        # Arrange
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "git@github.com:test-owner/test-repo.git\n"
+        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act
+        result = detect_github_url_base(mock_repo_path)
+
+        # Assert
+        assert result == "https://test-owner.github.io/test-repo/"
+
+    def test_detect_github_url_https_format(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+        """Test GitHub URL detection with HTTPS remote format.
+
+        Tests: detect_github_url_base parses HTTPS git URLs correctly
+        How: Mock subprocess to return HTTPS format git URL
+        Why: GitHub HTTPS remotes are common, must parse to Pages URL
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mocker: pytest-mock fixture
+        """
+        # Arrange
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "https://github.com/test-owner/test-repo.git\n"
+        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act
+        result = detect_github_url_base(mock_repo_path)
+
+        # Assert
+        assert result == "https://test-owner.github.io/test-repo/"
+
+    def test_detect_github_url_ssh_without_git_suffix(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+        """Test GitHub URL detection with SSH format without .git suffix.
+
+        Tests: detect_github_url_base handles URLs without .git extension
+        How: Mock subprocess to return SSH URL without .git
+        Why: Some repositories use remote URLs without .git suffix
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mocker: pytest-mock fixture
+        """
+        # Arrange
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "git@github.com:test-owner/test-repo\n"
+        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act
+        result = detect_github_url_base(mock_repo_path)
+
+        # Assert
+        assert result == "https://test-owner.github.io/test-repo/"
+
+    def test_detect_github_url_no_remote(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+        """Test GitHub URL detection when git remote fails.
+
+        Tests: detect_github_url_base returns None for repositories without remote
+        How: Mock subprocess to return non-zero exit code
+        Why: Not all repositories have remotes configured
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mocker: pytest-mock fixture
+        """
+        # Arrange
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 128  # Git error code
+        mock_result.stdout = ""
+        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act
+        result = detect_github_url_base(mock_repo_path)
+
+        # Assert
+        assert result is None
+
+    def test_detect_github_url_non_github_remote(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+        """Test GitHub URL detection with non-GitHub remote.
+
+        Tests: detect_github_url_base returns None for GitLab/Bitbucket remotes
+        How: Mock subprocess to return GitLab URL
+        Why: Function should only parse GitHub URLs
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mocker: pytest-mock fixture
+        """
+        # Arrange
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "git@gitlab.com:test-owner/test-repo.git\n"
+        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act
+        result = detect_github_url_base(mock_repo_path)
+
+        # Assert
+        assert result is None
+
+
+class TestCCodeDetection:
+    """Test suite for C/C++ code detection in repository.
+
+    Tests the detect_c_code function which checks for C/C++ files
+    in the source/ directory.
+    """
+
+    def test_detect_c_code_with_c_files(self, mock_c_code_repo: Path) -> None:
+        """Test C code detection when .c files present.
+
+        Tests: detect_c_code returns True for repositories with C files
+        How: Use mock_c_code_repo fixture with .c and .h files
+        Why: C files should trigger Doxygen documentation
+
+        Args:
+            mock_c_code_repo: Repository with C source files
+        """
+        # Act
+        result = detect_c_code(mock_c_code_repo)
+
+        # Assert
+        assert result is True
+
+    def test_detect_c_code_with_cpp_files(self, mock_repo_path: Path) -> None:
+        """Test C code detection when .cpp files present.
+
+        Tests: detect_c_code returns True for C++ files
+        How: Create source/ directory with .cpp and .hpp files
+        Why: C++ files should also trigger Doxygen documentation
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        source_dir = mock_repo_path / "source"
+        source_dir.mkdir()
+        (source_dir / "main.cpp").write_text('int main() { return 0; }')
+        (source_dir / "utils.hpp").write_text('#ifndef UTILS_HPP\n#define UTILS_HPP\n#endif')
+
+        # Act
+        result = detect_c_code(mock_repo_path)
+
+        # Assert
+        assert result is True
+
+    def test_detect_c_code_no_source_directory(self, mock_repo_path: Path) -> None:
+        """Test C code detection when source/ directory missing.
+
+        Tests: detect_c_code returns False without source/ directory
+        How: Use repo without creating source/ directory
+        Why: Function should handle missing directory gracefully
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Act
+        result = detect_c_code(mock_repo_path)
+
+        # Assert
+        assert result is False
+
+    def test_detect_c_code_source_dir_exists_no_c_files(self, mock_repo_path: Path) -> None:
+        """Test C code detection when source/ exists but no C files.
+
+        Tests: detect_c_code returns False with only Python files in source/
+        How: Create source/ with .py files
+        Why: Should only detect C/C++ extensions
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        source_dir = mock_repo_path / "source"
+        source_dir.mkdir()
+        (source_dir / "script.py").write_text('print("hello")')
+        (source_dir / "data.txt").write_text('some data')
+
+        # Act
+        result = detect_c_code(mock_repo_path)
+
+        # Assert
+        assert result is False
+
+    def test_detect_c_code_with_cc_extension(self, mock_repo_path: Path) -> None:
+        """Test C code detection with .cc extension (Google C++ style).
+
+        Tests: detect_c_code recognizes .cc extension
+        How: Create source/ with .cc file
+        Why: .cc is valid C++ extension used by Google
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        source_dir = mock_repo_path / "source"
+        source_dir.mkdir()
+        (source_dir / "main.cc").write_text('int main() { return 0; }')
+
+        # Act
+        result = detect_c_code(mock_repo_path)
+
+        # Assert
+        assert result is True
+
+
+class TestTyperDependencyDetection:
+    """Test suite for Typer dependency detection in pyproject.toml.
+
+    Tests the detect_typer_dependency function which checks project
+    dependencies for the Typer package.
+    """
+
+    def test_detect_typer_dependency_present(self, mock_pyproject_with_typer: dict[str, Any]) -> None:
+        """Test Typer dependency detection when typer in dependencies.
+
+        Tests: detect_typer_dependency returns True when typer listed
+        How: Use mock pyproject dict with typer>=0.9.0
+        Why: Typer presence enables CLI documentation features
+
+        Args:
+            mock_pyproject_with_typer: Parsed pyproject with Typer
+        """
+        # Act
+        result = detect_typer_dependency(mock_pyproject_with_typer)
+
+        # Assert
+        assert result is True
+
+    def test_detect_typer_dependency_absent(self, parsed_pyproject: dict[str, Any]) -> None:
+        """Test Typer dependency detection when typer not in dependencies.
+
+        Tests: detect_typer_dependency returns False without typer
+        How: Use minimal pyproject without typer
+        Why: Should not enable CLI docs for non-CLI projects
+
+        Args:
+            parsed_pyproject: Minimal parsed pyproject dict
+        """
+        # Act
+        result = detect_typer_dependency(parsed_pyproject)
+
+        # Assert
+        assert result is False
+
+    def test_detect_typer_dependency_no_dependencies_key(self) -> None:
+        """Test Typer dependency detection when dependencies key missing.
+
+        Tests: detect_typer_dependency handles missing dependencies gracefully
+        How: Pass pyproject dict without project.dependencies key
+        Why: Should not crash on malformed pyproject.toml
+
+        """
+        # Arrange
+        pyproject = {"project": {"name": "test"}}
+
+        # Act
+        result = detect_typer_dependency(pyproject)
+
+        # Assert
+        assert result is False
+
+    def test_detect_typer_dependency_case_insensitive(self) -> None:
+        """Test Typer dependency detection is case-insensitive.
+
+        Tests: detect_typer_dependency matches "TYPER" or "Typer"
+        How: Pass dependencies with uppercase TYPER
+        Why: Dependency names should match regardless of case
+
+        """
+        # Arrange
+        pyproject = {"project": {"dependencies": ["TYPER>=0.9.0", "click>=8.0"]}}
+
+        # Act
+        result = detect_typer_dependency(pyproject)
+
+        # Assert
+        assert result is True
+
+    @pytest.mark.parametrize(
+        "dependency_string",
+        [
+            "typer>=0.9.0",
+            "typer[all]>=0.9.0",
+            "typer",
+            "  typer>=0.9.0  ",  # with whitespace
+        ],
+    )
+    def test_detect_typer_dependency_various_formats(self, dependency_string: str) -> None:
+        """Test Typer dependency detection with various dependency formats.
+
+        Tests: detect_typer_dependency handles version specifiers and extras
+        How: Parametrized test with different typer dependency strings
+        Why: PyPI dependencies can have extras, versions, whitespace
+
+        Args:
+            dependency_string: Various typer dependency formats
+        """
+        # Arrange
+        pyproject = {"project": {"dependencies": [dependency_string]}}
+
+        # Act
+        result = detect_typer_dependency(pyproject)
+
+        # Assert
+        assert result is True
+
+
+class TestTyperCLIModuleDetection:
+    """Test suite for Typer CLI module detection via AST parsing.
+
+    Tests the detect_typer_cli_module function which searches the
+    package structure for Python files containing Typer app instances.
+    """
+
+    def test_detect_typer_cli_module_found(
+        self, mock_typer_cli_repo: Path, mock_pyproject_with_typer: dict[str, Any]
+    ) -> None:
+        """Test Typer CLI module detection when CLI module exists.
+
+        Tests: detect_typer_cli_module returns module path for Typer apps
+        How: Use mock repo with package containing cli.py with Typer app
+        Why: Enables automatic CLI documentation generation
+
+        Args:
+            mock_typer_cli_repo: Repository with Typer CLI
+            mock_pyproject_with_typer: Parsed pyproject with Typer
+        """
+        # Act
+        result = detect_typer_cli_module(mock_typer_cli_repo, mock_pyproject_with_typer)
+
+        # Assert
+        assert result == "test_cli_project.cli"
+
+    def test_detect_typer_cli_module_no_package(self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]) -> None:
+        """Test Typer CLI module detection when package directory missing.
+
+        Tests: detect_typer_cli_module returns None without package
+        How: Use repo without creating package directory
+        Why: Should handle projects without source code gracefully
+
+        Args:
+            mock_repo_path: Empty repository directory
+            mock_pyproject_with_typer: Parsed pyproject with Typer
+        """
+        # Act
+        result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
+
+        # Assert
+        assert result is None
+
+    def test_detect_typer_cli_module_no_typer_import(
+        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+    ) -> None:
+        """Test Typer CLI module detection when Python files lack typer import.
+
+        Tests: detect_typer_cli_module returns None without typer imports
+        How: Create package with .py files but no typer usage
+        Why: Should only detect files with actual Typer usage
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mock_pyproject_with_typer: Parsed pyproject with Typer
+        """
+        # Arrange
+        package_dir = mock_repo_path / "test_cli_project"
+        package_dir.mkdir()
+        (package_dir / "__init__.py").write_text('"""Package without CLI."""')
+        (package_dir / "utils.py").write_text('def helper(): pass')
+
+        # Act
+        result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
+
+        # Assert
+        assert result is None
+
+    def test_detect_typer_cli_module_skips_test_files(
+        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+    ) -> None:
+        """Test Typer CLI module detection skips test files.
+
+        Tests: detect_typer_cli_module ignores test_*.py files
+        How: Create package with Typer app only in test file
+        Why: Test files should not be documented as CLI entry points
+
+        Args:
+            mock_repo_path: Temporary repository directory
+            mock_pyproject_with_typer: Parsed pyproject with Typer
+        """
+        # Arrange
+        package_dir = mock_repo_path / "test_cli_project"
+        package_dir.mkdir()
+        (package_dir / "__init__.py").write_text('"""Package."""')
+        (package_dir / "test_cli.py").write_text(
+            """import typer
+app = typer.Typer()
+"""
+        )
+
+        # Act
+        result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
+
+        # Assert
+        assert result is None
+
+
+class TestPrivateRegistryDetection:
+    """Test suite for private registry detection from pyproject.toml.
+
+    Tests the detect_private_registry function which checks for
+    private PyPI registry configuration in tool.uv.index.
+    """
+
+    def test_detect_private_registry_present(self, mock_pyproject_with_private_registry: dict[str, Any]) -> None:
+        """Test private registry detection when configured.
+
+        Tests: detect_private_registry returns True and URL when configured
+        How: Use mock pyproject with [tool.uv.index] section
+        Why: Private registries require special GitHub Actions authentication
+
+        Args:
+            mock_pyproject_with_private_registry: Parsed pyproject with registry
+        """
+        # Act
+        is_private, registry_url = detect_private_registry(mock_pyproject_with_private_registry)
+
+        # Assert
+        assert is_private is True
+        assert registry_url == "https://private.pypi.org/simple"
+
+    def test_detect_private_registry_absent(self, parsed_pyproject: dict[str, Any]) -> None:
+        """Test private registry detection when not configured.
+
+        Tests: detect_private_registry returns False and None without config
+        How: Use minimal pyproject without uv.index section
+        Why: Most projects use public PyPI
+
+        Args:
+            parsed_pyproject: Minimal parsed pyproject dict
+        """
+        # Act
+        is_private, registry_url = detect_private_registry(parsed_pyproject)
+
+        # Assert
+        assert is_private is False
+        assert registry_url is None
+
+    def test_detect_private_registry_empty_index_list(self) -> None:
+        """Test private registry detection with empty index list.
+
+        Tests: detect_private_registry handles empty index list
+        How: Pass pyproject with tool.uv.index = []
+        Why: Should not crash on empty configuration
+
+        """
+        # Arrange
+        pyproject: dict[str, Any] = {"tool": {"uv": {"index": []}}}
+
+        # Act
+        is_private, registry_url = detect_private_registry(pyproject)
+
+        # Assert
+        assert is_private is False
+        assert registry_url is None
+
+    def test_detect_private_registry_no_url_in_index(self) -> None:
+        """Test private registry detection when index lacks url key.
+
+        Tests: detect_private_registry handles malformed index config
+        How: Pass index dict without "url" key
+        Why: Should handle invalid configuration gracefully
+
+        """
+        # Arrange
+        pyproject: dict[str, Any] = {"tool": {"uv": {"index": [{"name": "private"}]}}}
+
+        # Act
+        is_private, registry_url = detect_private_registry(pyproject)
+
+        # Assert
+        assert is_private is False
+        assert registry_url is None
