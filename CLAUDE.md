@@ -21,7 +21,7 @@ The main executable is `mkapidocs` - a single Python script with inline dependen
 
 The script is organized into distinct functional sections (mkapidocs:1-2396):
 
-1. **Template System** (lines 62-430): Inline Jinja2 templates for all generated files (mkdocs.yml, GitLab CI, markdown docs, gen_ref_pages.py)
+1. **Template System** (lines 62-430): Inline Jinja2 templates for all generated files (mkdocs.yml, GitHub Actions, markdown docs, gen_ref_pages.py)
 2. **Exception Classes** (lines 453-458): CLIError and BuildError for error handling
 3. **Message Types** (lines 461-467): MessageType enum for display formatting
 4. **Validation System** (lines 475-1090): Environment and project validation with DoxygenInstaller and SystemValidator classes
@@ -105,11 +105,11 @@ Note: The `install-pep723-deps` hook extracts dependencies from PEP 723 script b
 
 ### Git URL Detection (lines 1093-1173)
 
-The script extracts GitLab Pages URLs from git remotes. It handles:
+The script extracts GitHub Pages URLs from git remotes. It handles:
 
-- SSH format: `git@gitlab.com:group/project.git`
-- HTTPS format: `https://gitlab.com/group/project.git`
-- Supports nested groups
+- SSH format: `git@github.com:user/repo.git`
+- HTTPS format: `https://github.com/user/repo.git`
+- Converts to GitHub Pages URL format: `https://user.github.io/repo/`
 
 ### Source Path Detection (lines 1760-1814)
 
@@ -176,13 +176,16 @@ When `setup` is run on a project that already has mkdocs.yml:
 
 This allows users to customize their docs and safely re-run setup to pick up new features or template improvements.
 
-## GitLab CI Integration
+## GitHub Actions Integration
 
-Generated `.gitlab/workflows/pages.gitlab-ci.yml` uses:
+Generated `.github/workflows/pages.yml` uses:
 
-- `ghcr.io/astral-sh/uv:python3.11` image for uv availability
+- `actions/checkout@v4` for code checkout
+- `actions/setup-python@v5` for Python 3.11 setup
+- `astral-sh/setup-uv@v4` for uv installation
 - Runs `uvx mkapidocs build . --strict` (uses uvx to fetch/run script)
-- Deploys to GitLab Pages on default branch only
+- `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4` for GitHub Pages deployment
+- Deploys to GitHub Pages on pushes to main branch only
 
 ## Validation System
 

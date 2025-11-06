@@ -52,7 +52,7 @@ console = Console()
 # Initialize Typer app
 app = typer.Typer(
     name="python-docs-init",
-    help="Automated documentation setup tool for Python projects using MkDocs and GitLab Pages",
+    help="Automated documentation setup tool for Python projects using MkDocs and GitHub Pages",
     add_completion=False,
     rich_markup_mode="rich",
 )
@@ -160,17 +160,57 @@ nav:
   - Repository Files: repository/SUMMARY.md
 """
 
-GITLAB_CI_TEMPLATE = """pages:
-  stage: deploy
-  image: ghcr.io/astral-sh/uv:python3.11
-  script:
-    - uvx python-docs-init build . --strict
-    - mv site public
-  artifacts:
-    paths:
-      - public
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+GITHUB_ACTIONS_PAGES_TEMPLATE = """name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build documentation
+        run: uvx mkapidocs build . --strict
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 """
 
 INDEX_MD_TEMPLATE = """# {{ project_name }}
@@ -315,7 +355,7 @@ This guide provides detailed installation instructions for {{ project_name }}.
 - uv package manager
 - Git (for development installation)
 {% if has_private_registry %}
-- GitLab credentials (for private registry access)
+- Registry credentials (for private registry access)
 {% endif %}
 
 ## Quick Install
@@ -1051,40 +1091,32 @@ def convert_ssh_to_https(git_url: str) -> str:
     return git_url
 
 
-def detect_gitlab_url_base(repo_path: Path) -> str | None:
-    """Detect GitLab Pages URL base from git remote.
+def detect_github_url_base(repo_path: Path) -> str | None:
+    """Detect GitHub Pages URL base from git remote.
 
     Args:
         repo_path: Path to repository.
 
     Returns:
-        GitLab Pages URL base or None if not detected.
+        GitHub Pages URL base or None if not detected.
     """
     remote_url = get_git_remote_url(repo_path)
     if remote_url is None:
         return None
 
-    # Parse SSH format
-    ssh_match = re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)/([^/]+?)(?:\.git)?$", remote_url)
+    # Parse SSH format: git@github.com:owner/repo.git
+    ssh_match = re.match(r"^(?:ssh://)?git@github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
     if ssh_match:
-        host = ssh_match.group(1)
-        group_path = ssh_match.group(2)
-        parts = [p for p in group_path.split("/") if p]
-        if len(parts) >= 2:
-            subdomain = parts[0]
-            path = "/".join(parts[1:])
-            return f"https://{subdomain}.{host}/{path}/"
+        owner = ssh_match.group(1)
+        repo = ssh_match.group(2)
+        return f"https://{owner}.github.io/{repo}/"
 
-    # Parse HTTPS format
-    https_match = re.match(r"^https://(?:[^@]+@)?([^/]+)/(.+?)/([^/]+?)(?:\.git)?$", remote_url)
+    # Parse HTTPS format: https://github.com/owner/repo.git
+    https_match = re.match(r"^https://(?:[^@]+@)?github\.com/([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
     if https_match:
-        host = https_match.group(1)
-        group_path = https_match.group(2)
-        parts = [p for p in group_path.split("/") if p]
-        if len(parts) >= 2:
-            subdomain = parts[0]
-            path = "/".join(parts[1:])
-            return f"https://{subdomain}.{host}/{path}/"
+        owner = https_match.group(1)
+        repo = https_match.group(2)
+        return f"https://{owner}.github.io/{repo}/"
 
     return None
 
@@ -1526,48 +1558,6 @@ def _merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str,
     return merged_content, changes
 
 
-def _merge_gitlab_ci_yaml(existing_path: Path, template_content: str) -> tuple[str, list[FileChange]]:
-    """Merge existing GitLab CI config with template, preserving user customizations.
-
-    Args:
-        existing_path: Path to existing pages.gitlab-ci.yml
-        template_content: Rendered template content
-
-    Returns:
-        Tuple of (merged_yaml_string, list_of_changes)
-
-    Raises:
-        CLIError: If YAML parsing fails or merge conflicts occur
-    """
-    try:
-        existing_yaml = yaml.safe_load(existing_path.read_text())
-    except yaml.YAMLError as e:
-        msg = f"Failed to parse existing {existing_path.name}: {e}"
-        raise CLIError(msg) from e
-
-    try:
-        template_yaml = yaml.safe_load(template_content)
-    except yaml.YAMLError as e:
-        msg = f"Failed to parse template YAML: {e}"
-        raise CLIError(msg) from e
-
-    # Define template-owned keys for GitLab CI
-    template_owned_keys = {
-        "pages.image",
-        "pages.stage",
-        "pages.script",
-        "pages.artifacts.paths",
-        "pages.rules",
-    }
-
-    merged_yaml, changes = _merge_yaml_configs(existing_yaml, template_yaml, template_owned_keys)
-
-    # Convert back to YAML string
-    merged_content = yaml.dump(merged_yaml, default_flow_style=False, sort_keys=False, allow_unicode=True)
-
-    return merged_content, changes
-
-
 def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_c_code: bool, has_typer: bool) -> None:
     """Create or update mkdocs.yml configuration file.
 
@@ -1577,7 +1567,7 @@ def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_
     Args:
         repo_path: Path to repository.
         project_name: Name of the project.
-        site_url: Full URL for GitLab Pages site.
+        site_url: Full URL for GitHub Pages site.
         has_c_code: Whether repository contains C/C++ code.
         has_typer: Whether repository uses Typer.
 
@@ -1602,36 +1592,31 @@ def create_mkdocs_config(repo_path: Path, project_name: str, site_url: str, has_
         console.print(f"[green]:white_check_mark:[/green] Created {mkdocs_path.name}")
 
 
-def create_gitlab_ci(repo_path: Path) -> None:
-    """Create or update .gitlab/workflows/pages.gitlab-ci.yml.
+def create_github_actions(repo_path: Path) -> None:
+    """Create .github/workflows/pages.yml for GitHub Pages deployment.
 
-    If the file exists, performs a smart merge that preserves user customizations
-    while updating template-owned keys. If the file doesn't exist, creates it fresh.
+    Creates a fresh GitHub Actions workflow file. If the file exists, it will be
+    overwritten with the template (no smart merge for GitHub Actions).
 
     Args:
         repo_path: Path to repository.
-
-    Raises:
-        CLIError: If existing YAML cannot be parsed or merge fails
     """
-    gitlab_dir = repo_path / ".gitlab" / "workflows"
-    gitlab_dir.mkdir(parents=True, exist_ok=True)
+    github_dir = repo_path / ".github" / "workflows"
+    github_dir.mkdir(parents=True, exist_ok=True)
 
     env = Environment()
-    template = env.from_string(GITLAB_CI_TEMPLATE)
+    template = env.from_string(GITHUB_ACTIONS_PAGES_TEMPLATE)
     content = template.render()
 
-    ci_path = gitlab_dir / "pages.gitlab-ci.yml"
+    workflow_path = github_dir / "pages.yml"
 
-    if ci_path.exists():
-        # File exists - perform smart merge
-        merged_content, changes = _merge_gitlab_ci_yaml(ci_path, content)
-        ci_path.write_text(merged_content)
-        _display_file_changes(ci_path, changes)
+    # Always write fresh - GitHub Actions workflows are simpler
+    workflow_path.write_text(content)
+
+    if workflow_path.exists():
+        console.print(f"[green]:white_check_mark:[/green] Updated {workflow_path.name}")
     else:
-        # New file - create fresh
-        ci_path.write_text(content)
-        console.print(f"[green]:white_check_mark:[/green] Created {ci_path.name}")
+        console.print(f"[green]:white_check_mark:[/green] Created {workflow_path.name}")
 
 
 def create_index_page(
@@ -1855,7 +1840,7 @@ def create_supporting_docs(
         pyproject: Parsed pyproject.toml.
         has_c_code: Whether repository contains C/C++ code.
         has_typer: Whether repository uses Typer.
-        site_url: Full URL for GitLab Pages site.
+        site_url: Full URL for GitHub Pages site.
         git_url: Git repository URL.
     """
     docs_dir = repo_path / "docs"
@@ -1893,15 +1878,15 @@ def create_supporting_docs(
         console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
 
 
-def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> None:
+def setup_documentation(repo_path: Path, github_url_base: str | None = None) -> None:
     """Set up MkDocs documentation for a Python repository.
 
     Args:
         repo_path: Path to repository.
-        gitlab_url_base: Base URL for GitLab Pages.
+        github_url_base: Base URL for GitHub Pages.
 
     Raises:
-        ValueError: If gitlab_url_base is None and auto-detection fails.
+        ValueError: If github_url_base is None and auto-detection fails.
     """
     pyproject = read_pyproject(repo_path)
 
@@ -1910,14 +1895,14 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
     license_info = pyproject.get("project", {}).get("license", {})
     license_name = license_info.get("text", "See LICENSE file")
 
-    if gitlab_url_base is None:
-        gitlab_url_base = detect_gitlab_url_base(repo_path)
-        if gitlab_url_base is None:
+    if github_url_base is None:
+        github_url_base = detect_github_url_base(repo_path)
+        if github_url_base is None:
             raise ValueError(
-                "Could not auto-detect GitLab URL from git remote. Please provide --gitlab-url-base option."
+                "Could not auto-detect GitHub URL from git remote. Please provide --github-url-base option."
             )
 
-    site_url = f"{gitlab_url_base.rstrip('/')}/{project_name}/"
+    site_url = github_url_base.rstrip('/')
 
     has_c_code = detect_c_code(repo_path)
     has_typer = detect_typer_dependency(pyproject)
@@ -1948,7 +1933,7 @@ def setup_documentation(repo_path: Path, gitlab_url_base: str | None = None) -> 
     has_typer_cli = cli_module is not None
 
     create_mkdocs_config(repo_path, project_name, site_url, has_c_code, has_typer_cli)
-    create_gitlab_ci(repo_path)
+    create_github_actions(repo_path)
     create_index_page(
         repo_path,
         project_name,
@@ -2190,11 +2175,11 @@ def setup(
     repo_path: Annotated[
         Path, typer.Argument(help="Path to Python repository to set up documentation for", resolve_path=True)
     ],
-    gitlab_url_base: Annotated[
+    github_url_base: Annotated[
         str | None,
         typer.Option(
-            "--gitlab-url-base",
-            help="Base URL for GitLab Pages (auto-detected from git remote if not provided)",
+            "--github-url-base",
+            help="Base URL for GitHub Pages (auto-detected from git remote if not provided)",
             rich_help_panel="Configuration",
         ),
     ] = None,
@@ -2203,7 +2188,7 @@ def setup(
 
     Args:
         repo_path: Path to the repository
-        gitlab_url_base: Base URL for GitLab Pages
+        github_url_base: Base URL for GitHub Pages
     """
     try:
         # Validate environment before setup
@@ -2226,14 +2211,14 @@ def setup(
             title="Starting Setup",
         )
 
-        setup_documentation(repo_path, gitlab_url_base)
+        setup_documentation(repo_path, github_url_base)
 
         display_message(
             f"Documentation setup complete for [bold cyan]{repo_path.name}[/bold cyan]\n\n"
             f"Next steps:\n"
-            f"  1. Preview docs locally: [bold]python-docs-init serve {repo_path}[/bold]\n"
-            f"  2. Build docs: [bold]python-docs-init build {repo_path}[/bold]\n"
-            f"  3. Commit and push changes to enable GitLab Pages",
+            f"  1. Preview docs locally: [bold]mkapidocs serve {repo_path}[/bold]\n"
+            f"  2. Build docs: [bold]mkapidocs build {repo_path}[/bold]\n"
+            f"  3. Commit and push changes to enable GitHub Pages",
             MessageType.SUCCESS,
             title="Setup Complete",
         )
@@ -2384,7 +2369,7 @@ def serve(
 def main(
     ctx: typer.Context, verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose output")] = False
 ) -> None:
-    """mkapidocs - Automated documentation setup tool."""
+    """Mkapidocs - Automated documentation setup tool."""
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
         raise typer.Exit(0)

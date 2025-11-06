@@ -1,6 +1,6 @@
 # mkapidocs
 
-Automated documentation setup tool for Python projects using MkDocs and GitLab Pages.
+Automated documentation setup tool for Python projects using MkDocs and GitHub Pages.
 
 This is a PEP 723 standalone script that sets up comprehensive MkDocs documentation for Python repositories with auto-detection of features like C/C++ code and Typer CLI interfaces.
 
@@ -11,7 +11,7 @@ mkapidocs automatically:
 - Detects project features (C/C++ code, Typer CLI, private registries)
 - Generates MkDocs configuration with Material theme
 - Creates documentation structure with API references
-- Sets up GitLab Pages workflow
+- Sets up GitHub Actions workflow for GitHub Pages
 - Configures docstring linting with ruff
 - Generates automated API documentation pages
 - Creates supporting docs (installation, quick start, contributing, etc.)
@@ -22,7 +22,7 @@ mkapidocs automatically:
 
 - Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
-- Git (optional, for automatic GitLab URL detection)
+- Git (optional, for automatic GitHub URL detection)
 
 Install uv if not already installed:
 
@@ -36,7 +36,7 @@ The Python project you want to generate documentation for must have:
 
 - A `pyproject.toml` file with project metadata (name, description, version, etc.)
 - Proper Python package structure for API documentation
-- Git repository (optional, but recommended for GitLab Pages URL auto-detection)
+- Git repository (optional, but recommended for GitHub Pages URL auto-detection)
 
 ## Installation
 
@@ -89,11 +89,11 @@ The script can be run from any location. The working directory does not matter -
 Initialize or update documentation for a Python project:
 
 ```bash
-# Auto-detect GitLab Pages URL from git remote
+# Auto-detect GitHub Pages URL from git remote
 ./mkapidocs setup /path/to/your/project
 
-# Specify custom GitLab Pages base URL
-./mkapidocs setup /path/to/your/project --gitlab-url-base https://your-org.gitlab.io/group/
+# Specify custom GitHub Pages base URL
+./mkapidocs setup /path/to/your/project --github-url-base https://your-username.github.io/repo-name/
 ```
 
 Example with real paths:
@@ -105,8 +105,8 @@ Example with real paths:
 # Setup docs for a project in the current directory
 ./mkapidocs setup .
 
-# Setup docs with explicit GitLab URL
-./mkapidocs setup ~/repos/my-project --gitlab-url-base https://mycompany.gitlab.io/team/
+# Setup docs with explicit GitHub URL
+./mkapidocs setup ~/repos/my-project --github-url-base https://mycompany.github.io/my-project/
 ```
 
 **Important:** The `setup` command is non-destructive and safe to run multiple times:
@@ -126,7 +126,7 @@ This command:
 4. Detects private registry configuration
 5. Creates or updates mkdocs.yml with all necessary plugins
 6. Creates docs/ directory with documentation pages
-7. Creates .gitlab/workflows/pages.gitlab-ci.yml for GitLab Pages
+7. Creates .github/workflows/pages.yml for GitHub Pages deployment
 8. Adds docstring linting rules to ruff configuration
 
 ### Building Documentation
@@ -212,9 +212,9 @@ your-project/
 │       ├── python-api.md               # Python API reference
 │       ├── c-api.md                    # C API reference (if C code detected)
 │       └── cli-api.md                  # CLI reference (if Typer detected)
-└── .gitlab/
+└── .github/
     └── workflows/
-        └── pages.gitlab-ci.yml         # GitLab Pages workflow
+        └── pages.yml                   # GitHub Pages workflow
 ```
 
 **Preserved on re-run:** `index.md`, `install.md`, and user customizations in `mkdocs.yml`
@@ -236,8 +236,8 @@ The script auto-detects:
    - Adds installation instructions with --index flag
    - Documents registry configuration
 
-4. **Git Remote**: Extracts GitLab Pages URL from git remote
-   - Supports SSH and HTTPS formats
+4. **Git Remote**: Extracts GitHub Pages URL from git remote
+   - Supports SSH and HTTPS formats (git@github.com:user/repo.git or https://github.com/user/repo.git)
    - Auto-generates site_url for mkdocs.yml
 
 ## MkDocs Plugins Included
@@ -327,18 +327,21 @@ When you commit changes to Python files:
 
 **Note:** The hook ID is `mkapidocs-regen` for backward compatibility, but it runs the `setup` command (which is non-destructive).
 
-## GitLab Pages Deployment
+## GitHub Pages Deployment
 
-After running setup and pushing to GitLab, the .gitlab/workflows/pages.gitlab-ci.yml workflow will:
+After running setup and pushing to GitHub, the .github/workflows/pages.yml workflow will:
 
-1. Install uv in a Python 3.11 container
-2. Run `uvx mkapidocs build . --strict`
-3. Move site/ to public/
-4. Deploy to GitLab Pages
+1. Check out the code
+2. Set up Python 3.11 and install uv
+3. Run `uvx mkapidocs build . --strict`
+4. Upload the site/ directory as a GitHub Pages artifact
+5. Deploy to GitHub Pages
 
 The documentation will be available at:
 
-- https://your-org.gitlab.io/group/project-name/
+- https://your-username.github.io/repo-name/
+
+**Note:** You need to enable GitHub Pages in your repository settings and configure it to deploy from GitHub Actions.
 
 ## Customization
 
@@ -386,13 +389,13 @@ The build and serve commands require mkdocs.yml to exist. Run setup first:
 ./mkapidocs setup /path/to/project
 ```
 
-### GitLab URL detection fails
+### GitHub URL detection fails
 
 If git remote is not configured or in unexpected format:
 
 ```bash
 # Provide explicit URL
-./mkapidocs setup /path/to/project --gitlab-url-base https://your-org.gitlab.io/group/
+./mkapidocs setup /path/to/project --github-url-base https://your-username.github.io/repo-name/
 ```
 
 ### Module import errors during build
