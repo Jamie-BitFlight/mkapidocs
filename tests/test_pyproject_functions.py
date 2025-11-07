@@ -9,9 +9,6 @@ Tests cover:
 
 from __future__ import annotations
 
-# Import mkapidocs module
-import importlib.machinery
-import importlib.util
 import sys
 import tomllib
 from pathlib import Path
@@ -19,23 +16,12 @@ from typing import Any
 
 import pytest
 
-script_path = Path(__file__).parent.parent / "mkapidocs"
-
-loader = importlib.machinery.SourceFileLoader("mkapidocs", str(script_path))
-spec = importlib.util.spec_from_loader("mkapidocs", loader)
-
-if spec is None:
-    raise ImportError(f"Could not create module spec for {script_path}")
-
-mkapidocs = importlib.util.module_from_spec(spec)
-sys.modules["mkapidocs"] = mkapidocs
-loader.exec_module(mkapidocs)
-
-# Extract functions
-read_pyproject = mkapidocs.read_pyproject
-write_pyproject = mkapidocs.write_pyproject
-get_source_paths_from_pyproject = mkapidocs.get_source_paths_from_pyproject
-update_ruff_config = mkapidocs.update_ruff_config
+# Module is imported in conftest.py with session scope
+# Access functions directly from sys.modules after conftest runs
+read_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].read_pyproject(*args, **kwargs)
+write_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].write_pyproject(*args, **kwargs)
+get_source_paths_from_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].get_source_paths_from_pyproject(*args, **kwargs)
+update_ruff_config = lambda *args, **kwargs: sys.modules["mkapidocs"].update_ruff_config(*args, **kwargs)
 
 
 class TestReadPyproject:
