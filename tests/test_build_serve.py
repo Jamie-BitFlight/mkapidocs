@@ -18,17 +18,17 @@ from pytest_mock import MockerFixture
 
 # Access mkapidocs module functions (deferred lookup at test runtime)
 def build_docs(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.build_docs with deferred module lookup."""
+    """Wrapper for mkapidocs.build_docs with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].build_docs(*args, **kwargs)
 
 
 def serve_docs(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.serve_docs with deferred module lookup."""
+    """Wrapper for mkapidocs.serve_docs with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].serve_docs(*args, **kwargs)
 
 
 def get_source_paths_from_pyproject(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.get_source_paths_from_pyproject with deferred module lookup."""
+    """Wrapper for mkapidocs.get_source_paths_from_pyproject with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].get_source_paths_from_pyproject(*args, **kwargs)
 
 

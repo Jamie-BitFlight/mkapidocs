@@ -18,22 +18,22 @@ from pytest_mock import MockerFixture
 
 # Access mkapidocs module classes (deferred lookup at test runtime)
 def DoxygenInstaller():  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.DoxygenInstaller with deferred module lookup."""
+    """Wrapper for mkapidocs.DoxygenInstaller with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].DoxygenInstaller
 
 
 def SystemValidator():  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.SystemValidator with deferred module lookup."""
+    """Wrapper for mkapidocs.SystemValidator with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].SystemValidator
 
 
 def ProjectValidator():  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.ProjectValidator with deferred module lookup."""
+    """Wrapper for mkapidocs.ProjectValidator with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].ProjectValidator
 
 
 def ValidationResult():  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.ValidationResult with deferred module lookup."""
+    """Wrapper for mkapidocs.ValidationResult with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].ValidationResult
 
 

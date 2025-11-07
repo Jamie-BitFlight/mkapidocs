@@ -13,19 +13,39 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
-import pytest
 import yaml
-from pytest_mock import MockerFixture
+
 
 # Access mkapidocs module from sys.modules (loaded by session-scoped fixture in conftest.py)
-create_mkdocs_config = lambda *args, **kwargs: sys.modules["mkapidocs"].create_mkdocs_config(*args, **kwargs)
-create_github_actions = lambda *args, **kwargs: sys.modules["mkapidocs"].create_github_actions(*args, **kwargs)
-create_index_page = lambda *args, **kwargs: sys.modules["mkapidocs"].create_index_page(*args, **kwargs)
-create_api_reference = lambda *args, **kwargs: sys.modules["mkapidocs"].create_api_reference(*args, **kwargs)
-create_gen_files_script = lambda *args, **kwargs: sys.modules["mkapidocs"].create_gen_files_script(*args, **kwargs)
-create_generated_content = lambda *args, **kwargs: sys.modules["mkapidocs"].create_generated_content(*args, **kwargs)
+def create_mkdocs_config(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_mkdocs_config with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_mkdocs_config(*args, **kwargs)
+
+
+def create_github_actions(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_github_actions with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_github_actions(*args, **kwargs)
+
+
+def create_index_page(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_index_page with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_index_page(*args, **kwargs)
+
+
+def create_api_reference(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_api_reference with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_api_reference(*args, **kwargs)
+
+
+def create_gen_files_script(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_gen_files_script with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_gen_files_script(*args, **kwargs)
+
+
+def create_generated_content(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.create_generated_content with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].create_generated_content(*args, **kwargs)
 
 
 class TestCreateMkdocsConfig:
