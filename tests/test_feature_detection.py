@@ -17,13 +17,32 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
+
 # Module is imported in conftest.py with session scope
 # Access functions directly from sys.modules after conftest runs
-detect_github_url_base = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_github_url_base(*args, **kwargs)
-detect_c_code = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_c_code(*args, **kwargs)
-detect_typer_dependency = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_typer_dependency(*args, **kwargs)
-detect_typer_cli_module = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_typer_cli_module(*args, **kwargs)
-detect_private_registry = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_private_registry(*args, **kwargs)
+def detect_github_url_base(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.detect_github_url_base with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].detect_github_url_base(*args, **kwargs)
+
+
+def detect_c_code(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.detect_c_code with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].detect_c_code(*args, **kwargs)
+
+
+def detect_typer_dependency(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.detect_typer_dependency with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].detect_typer_dependency(*args, **kwargs)
+
+
+def detect_typer_cli_module(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.detect_typer_cli_module with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].detect_typer_cli_module(*args, **kwargs)
+
+
+def detect_private_registry(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.detect_private_registry with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].detect_private_registry(*args, **kwargs)
 
 
 class TestGitHubURLDetection:

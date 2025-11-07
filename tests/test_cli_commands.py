@@ -11,7 +11,6 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from pytest_mock import MockerFixture
@@ -62,7 +61,7 @@ class TestVersionCommand:
 
         Args:
             cli_runner: Typer test runner
-            app: Typer app instance from fixture
+            typer_app: Typer app instance from fixture
         """
         # Act
         result = cli_runner.invoke(typer_app, ["version"])
@@ -88,6 +87,7 @@ class TestInfoCommand:
 
         Args:
             cli_runner: Typer test runner
+            typer_app: Typer app instance from fixture
         """
         # Act
         result = cli_runner.invoke(typer_app, ["info"])
@@ -118,6 +118,7 @@ class TestSetupCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
@@ -138,6 +139,7 @@ class TestSetupCommand:
         Args:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory without pyproject.toml
+            typer_app: Typer app instance from fixture
         """
         # Act
         result = cli_runner.invoke(typer_app, ["setup", str(mock_repo_path)])
@@ -164,6 +166,7 @@ class TestSetupCommand:
             mock_repo_path: Temporary repository directory
             mock_pyproject_toml: Mock pyproject.toml file
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -199,6 +202,7 @@ class TestBuildCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
@@ -222,6 +226,7 @@ class TestBuildCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -245,6 +250,7 @@ class TestBuildCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -271,6 +277,7 @@ class TestBuildCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -299,6 +306,7 @@ class TestBuildCommand:
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
             tmp_path: Pytest temporary directory
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -327,6 +335,7 @@ class TestBuildCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -359,6 +368,7 @@ class TestServeCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
@@ -382,6 +392,7 @@ class TestServeCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -405,6 +416,7 @@ class TestServeCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
@@ -431,6 +443,7 @@ class TestServeCommand:
             cli_runner: Typer test runner
             mock_repo_path: Temporary repository directory
             mocker: pytest-mock fixture
+            typer_app: Typer app instance from fixture
         """
         # Arrange
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))

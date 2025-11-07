@@ -16,12 +16,27 @@ from typing import Any
 
 import pytest
 
+
 # Module is imported in conftest.py with session scope
 # Access functions directly from sys.modules after conftest runs
-read_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].read_pyproject(*args, **kwargs)
-write_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].write_pyproject(*args, **kwargs)
-get_source_paths_from_pyproject = lambda *args, **kwargs: sys.modules["mkapidocs"].get_source_paths_from_pyproject(*args, **kwargs)
-update_ruff_config = lambda *args, **kwargs: sys.modules["mkapidocs"].update_ruff_config(*args, **kwargs)
+def read_pyproject(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.read_pyproject with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].read_pyproject(*args, **kwargs)
+
+
+def write_pyproject(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.write_pyproject with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].write_pyproject(*args, **kwargs)
+
+
+def get_source_paths_from_pyproject(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.get_source_paths_from_pyproject with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].get_source_paths_from_pyproject(*args, **kwargs)
+
+
+def update_ruff_config(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.update_ruff_config with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].update_ruff_config(*args, **kwargs)
 
 
 class TestReadPyproject:
