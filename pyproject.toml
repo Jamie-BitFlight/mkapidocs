@@ -61,6 +61,7 @@ ignore = [
     "Q003",
     "TRY003",
     "DOC501",
+    "T201",  # Allow print statements - not all print() is debug code
 ]
 unfixable = [
     "F401",

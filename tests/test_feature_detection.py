@@ -10,10 +10,6 @@ Tests cover:
 
 from __future__ import annotations
 
-# Import functions from the mkapidocs script (PEP 723 standalone)
-# Use importlib.machinery for loading scripts without .py extension
-import importlib.machinery
-import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,34 +17,13 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
-script_path = Path(__file__).parent.parent / "mkapidocs"
-
-# Load the mkapidocs script using SourceFileLoader which handles files without .py
-loader = importlib.machinery.SourceFileLoader("mkapidocs", str(script_path))
-spec = importlib.util.spec_from_loader("mkapidocs", loader)
-
-if spec is None:
-    raise ImportError(f"Could not create module spec for {script_path}")
-
-mkapidocs = importlib.util.module_from_spec(spec)
-sys.modules["mkapidocs"] = mkapidocs
-
-try:
-    loader.exec_module(mkapidocs)
-except Exception as e:
-    # If direct import fails, provide helpful error message
-    raise ImportError(
-        f"Could not import mkapidocs: {e}\n"
-        "Ensure all script dependencies are installed in dev environment"
-    ) from e
-
-# Extract functions we want to test
-detect_github_url_base = mkapidocs.detect_github_url_base
-detect_c_code = mkapidocs.detect_c_code
-detect_typer_dependency = mkapidocs.detect_typer_dependency
-detect_typer_cli_module = mkapidocs.detect_typer_cli_module
-detect_private_registry = mkapidocs.detect_private_registry
-get_git_remote_url = mkapidocs.get_git_remote_url
+# Module is imported in conftest.py with session scope
+# Access functions directly from sys.modules after conftest runs
+detect_github_url_base = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_github_url_base(*args, **kwargs)
+detect_c_code = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_c_code(*args, **kwargs)
+detect_typer_dependency = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_typer_dependency(*args, **kwargs)
+detect_typer_cli_module = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_typer_cli_module(*args, **kwargs)
+detect_private_registry = lambda *args, **kwargs: sys.modules["mkapidocs"].detect_private_registry(*args, **kwargs)
 
 
 class TestGitHubURLDetection:

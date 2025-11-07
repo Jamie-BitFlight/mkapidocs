@@ -162,7 +162,7 @@ nav:
 
 GITHUB_ACTIONS_PAGES_TEMPLATE = """name: Deploy Documentation
 
-on:
+"on":
   push:
     branches:
       - main
@@ -1604,9 +1604,7 @@ def create_github_actions(repo_path: Path) -> None:
     github_dir = repo_path / ".github" / "workflows"
     github_dir.mkdir(parents=True, exist_ok=True)
 
-    env = Environment()
-    template = env.from_string(GITHUB_ACTIONS_PAGES_TEMPLATE)
-    content = template.render()
+    content = GITHUB_ACTIONS_PAGES_TEMPLATE
 
     workflow_path = github_dir / "pages.yml"
 

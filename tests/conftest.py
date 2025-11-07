@@ -6,12 +6,52 @@ All fixtures follow modern Python 3.11+ type hint syntax and pytest-mock standar
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
+import sys
 from collections.abc import Generator
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mkapidocs_module() -> ModuleType:
+    """Import mkapidocs script as module for testing.
+
+    Tests: PEP 723 standalone script import
+    How: Use importlib.machinery.SourceFileLoader with session scope
+    Why: Single module instance prevents import state conflicts across test files
+
+    Returns:
+        Imported mkapidocs module
+
+    Note:
+        Session-scoped with autouse=True to ensure module loads before any test runs.
+        This prevents import conflicts where different test files create different
+        Typer app instances, causing mocking failures.
+    """
+    script_path = Path(__file__).parent.parent / "mkapidocs"
+
+    if "mkapidocs" in sys.modules:
+        # Module already loaded, return cached version
+        return sys.modules["mkapidocs"]
+
+    loader = importlib.machinery.SourceFileLoader("mkapidocs", str(script_path))
+    spec = importlib.util.spec_from_loader("mkapidocs", loader)
+
+    if spec is None:
+        msg = f"Could not create module spec for {script_path}"
+        raise ImportError(msg)
+
+    mkapidocs = importlib.util.module_from_spec(spec)
+    sys.modules["mkapidocs"] = mkapidocs
+    loader.exec_module(mkapidocs)
+
+    return mkapidocs
 
 
 @pytest.fixture

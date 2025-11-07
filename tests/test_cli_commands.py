@@ -10,30 +10,12 @@ Tests cover:
 
 from __future__ import annotations
 
-# Import the Typer app from mkapidocs script
-import importlib.machinery
-import importlib.util
-import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
-
-script_path = Path(__file__).parent.parent / "mkapidocs"
-
-loader = importlib.machinery.SourceFileLoader("mkapidocs", str(script_path))
-spec = importlib.util.spec_from_loader("mkapidocs", loader)
-
-if spec is None:
-    raise ImportError(f"Could not create module spec for {script_path}")
-
-mkapidocs = importlib.util.module_from_spec(spec)
-sys.modules["mkapidocs"] = mkapidocs
-loader.exec_module(mkapidocs)
-
-# Extract the Typer app
-app = mkapidocs.app
 
 
 @pytest.fixture
@@ -50,13 +32,28 @@ def cli_runner() -> CliRunner:
     return CliRunner()
 
 
+@pytest.fixture
+def typer_app():
+    """Extract Typer app from mkapidocs module.
+
+    Tests: CLI app instance access
+    How: Get app attribute from shared mkapidocs module loaded in conftest
+    Why: Ensures all tests use the same Typer app instance
+
+    Returns:
+        Typer app instance for CLI testing
+    """
+    import sys
+    return sys.modules["mkapidocs"].app
+
+
 class TestVersionCommand:
     """Test suite for version command.
 
     Tests the version command which displays version information.
     """
 
-    def test_version_command_success(self, cli_runner: CliRunner) -> None:
+    def test_version_command_success(self, cli_runner: CliRunner, typer_app) -> None:
         """Test version command displays version info.
 
         Tests: version command shows version number
@@ -65,9 +62,10 @@ class TestVersionCommand:
 
         Args:
             cli_runner: Typer test runner
+            app: Typer app instance from fixture
         """
         # Act
-        result = cli_runner.invoke(app, ["version"])
+        result = cli_runner.invoke(typer_app, ["version"])
 
         # Assert
         assert result.exit_code == 0
@@ -81,7 +79,7 @@ class TestInfoCommand:
     Tests the info command which displays package information.
     """
 
-    def test_info_command_success(self, cli_runner: CliRunner) -> None:
+    def test_info_command_success(self, cli_runner: CliRunner, typer_app) -> None:
         """Test info command displays package details.
 
         Tests: info command shows package metadata
@@ -92,7 +90,7 @@ class TestInfoCommand:
             cli_runner: Typer test runner
         """
         # Act
-        result = cli_runner.invoke(app, ["info"])
+        result = cli_runner.invoke(typer_app, ["info"])
 
         # Assert
         assert result.exit_code == 0
@@ -108,7 +106,7 @@ class TestSetupCommand:
     """
 
     def test_setup_command_validation_failure(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test setup command fails when validation fails.
 
@@ -125,12 +123,12 @@ class TestSetupCommand:
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
 
         # Act
-        result = cli_runner.invoke(app, ["setup", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["setup", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
 
-    def test_setup_command_missing_pyproject(self, cli_runner: CliRunner, mock_repo_path: Path) -> None:
+    def test_setup_command_missing_pyproject(self, cli_runner: CliRunner, mock_repo_path: Path, typer_app) -> None:
         """Test setup command fails when pyproject.toml missing.
 
         Tests: setup command handles missing pyproject.toml
@@ -142,7 +140,7 @@ class TestSetupCommand:
             mock_repo_path: Temporary repository directory without pyproject.toml
         """
         # Act
-        result = cli_runner.invoke(app, ["setup", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["setup", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
@@ -153,6 +151,7 @@ class TestSetupCommand:
         mock_repo_path: Path,
         mock_pyproject_toml: Path,
         mocker: MockerFixture,
+        typer_app,
     ) -> None:
         """Test setup command accepts custom GitHub URL.
 
@@ -172,7 +171,7 @@ class TestSetupCommand:
         custom_url = "https://custom.github.io/project/"
 
         # Act
-        result = cli_runner.invoke(app, ["setup", str(mock_repo_path), "--github-url-base", custom_url])
+        result = cli_runner.invoke(typer_app, ["setup", str(mock_repo_path), "--github-url-base", custom_url])
 
         # Assert
         assert result.exit_code == 0
@@ -188,7 +187,7 @@ class TestBuildCommand:
     """
 
     def test_build_command_validation_failure(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test build command fails when validation fails.
 
@@ -205,13 +204,13 @@ class TestBuildCommand:
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
 
     def test_build_command_missing_mkdocs_yml(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test build command fails when mkdocs.yml missing.
 
@@ -228,13 +227,13 @@ class TestBuildCommand:
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
 
     def test_build_command_success(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test build command succeeds with valid configuration.
 
@@ -253,14 +252,14 @@ class TestBuildCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 0
         mock_build.assert_called_once()
 
     def test_build_command_with_strict_flag(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test build command with --strict flag.
 
@@ -279,7 +278,7 @@ class TestBuildCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path), "--strict"])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path), "--strict"])
 
         # Assert
         assert result.exit_code == 0
@@ -287,7 +286,7 @@ class TestBuildCommand:
         assert mock_build.call_args[1]["strict"] is True
 
     def test_build_command_with_output_dir(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, tmp_path: Path
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, tmp_path: Path, typer_app
     ) -> None:
         """Test build command with custom output directory.
 
@@ -308,7 +307,7 @@ class TestBuildCommand:
         output_dir = tmp_path / "custom_output"
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path), "--output-dir", str(output_dir)])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path), "--output-dir", str(output_dir)])
 
         # Assert
         assert result.exit_code == 0
@@ -316,7 +315,7 @@ class TestBuildCommand:
         assert mock_build.call_args[1]["output_dir"] == output_dir
 
     def test_build_command_build_failure(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test build command handles mkdocs build failure.
 
@@ -335,7 +334,7 @@ class TestBuildCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(app, ["build", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["build", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
@@ -348,7 +347,7 @@ class TestServeCommand:
     """
 
     def test_serve_command_validation_failure(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test serve command fails when validation fails.
 
@@ -365,13 +364,13 @@ class TestServeCommand:
         mocker.patch("mkapidocs.validate_environment", return_value=(False, []))
 
         # Act
-        result = cli_runner.invoke(app, ["serve", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
 
     def test_serve_command_missing_mkdocs_yml(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test serve command fails when mkdocs.yml missing.
 
@@ -388,13 +387,13 @@ class TestServeCommand:
         mocker.patch("mkapidocs.validate_environment", return_value=(True, []))
 
         # Act
-        result = cli_runner.invoke(app, ["serve", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 1
 
     def test_serve_command_success(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test serve command invokes mkdocs serve.
 
@@ -413,14 +412,14 @@ class TestServeCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(app, ["serve", str(mock_repo_path)])
+        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path)])
 
         # Assert
         assert result.exit_code == 0
         mock_serve.assert_called_once()
 
     def test_serve_command_with_host_and_port(
-        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture
+        self, cli_runner: CliRunner, mock_repo_path: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test serve command with custom host and port.
 
@@ -439,7 +438,7 @@ class TestServeCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(app, ["serve", str(mock_repo_path), "--host", "0.0.0.0", "--port", "9000"])  # noqa: S104
+        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path), "--host", "0.0.0.0", "--port", "9000"])  # noqa: S104
 
         # Assert
         assert result.exit_code == 0
