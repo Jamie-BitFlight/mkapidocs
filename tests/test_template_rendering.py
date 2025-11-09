@@ -370,12 +370,12 @@ class TestCreateGitHubActions:
         assert "build" in parsed_yaml["jobs"]
         assert "deploy" in parsed_yaml["jobs"]
 
-    def test_workflow_uses_uvx_command(self, mock_repo_path: Path) -> None:
-        """Test GitHub Actions workflow uses uvx to run mkapidocs.
+    def test_workflow_uses_local_script_command(self, mock_repo_path: Path) -> None:
+        """Test GitHub Actions workflow uses local script to run mkapidocs.
 
-        Tests: Workflow build step uses uvx mkapidocs build command
+        Tests: Workflow build step uses ./mkapidocs build command
         How: Parse workflow YAML and check build step commands
-        Why: uvx ensures latest mkapidocs version without installation
+        Why: PEP 723 scripts are self-executing via shebang
 
         Args:
             mock_repo_path: Temporary repository directory
@@ -387,7 +387,7 @@ class TestCreateGitHubActions:
         workflow_path = mock_repo_path / ".github" / "workflows" / "pages.yml"
         workflow_content = workflow_path.read_text()
 
-        assert "uvx mkapidocs build . --strict" in workflow_content
+        assert "./mkapidocs build . --strict" in workflow_content
 
     def test_workflow_overwrites_existing_file(self, mock_repo_path: Path) -> None:
         """Test GitHub Actions workflow overwrites existing file.
