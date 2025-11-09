@@ -110,10 +110,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
 
-      - name: Upload package to GitHub Release
+      - name: Upload script to GitHub Release
         if: steps.release.outputs.released == 'true'
         run: |
-          gh release upload ${{ steps.release.outputs.tag }} dist/* --clobber
+          gh release upload ${{ steps.release.outputs.tag }} mkapidocs --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -131,7 +131,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Build documentation
-        run: uvx mkapidocs build . --strict
+        run: ./mkapidocs build . --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -193,7 +193,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Build documentation
-        run: uvx mkapidocs build . --strict
+        run: ./mkapidocs build . --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
