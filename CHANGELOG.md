@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-11-09)
+
+### Bug Fixes
+
+- Update all documentation references from python_docs_init to mkapidocs
+  ([`771df3c`](https://github.com/Jamie-BitFlight/mkapidocs/commit/771df3cca45f18db865ae84745876268b25a58d7))
+
+Updated all hardcoded module name references in documentation files: - docs/generated/python-api.md:
+  mkdocstrings directive - docs/reference/python.md: mkdocstrings directive - mkdocs.yml: site_name
+  and site_url (GitHub Pages URL) - docs/index.md: title, description (GitLab→GitHub), and
+  installation instructions (pip→uvx/curl for PEP 723 script)
+
+These hardcoded references were causing mkdocstrings to fail with ModuleNotFoundError during
+  documentation builds.
+
+
 ## v0.1.1 (2025-11-09)
 
 ### Bug Fixes
