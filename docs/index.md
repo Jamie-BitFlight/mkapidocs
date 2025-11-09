@@ -1,6 +1,6 @@
-# python_docs_init
+# mkapidocs
 
-Automated documentation setup tool for Python projects using MkDocs and GitLab Pages
+Automated documentation setup tool for Python projects using MkDocs and GitHub Pages
 
 ## Quick Start
 
@@ -13,7 +13,12 @@ TODO: Add feature list
 ## Installation
 
 ```bash
-pip install python_docs_init
+# Download the script
+curl -O https://github.com/Jamie-BitFlight/mkapidocs/releases/latest/download/mkapidocs
+chmod +x mkapidocs
+
+# Or run directly with uvx (no installation needed)
+uvx --from https://github.com/Jamie-BitFlight/mkapidocs/releases/latest/download/mkapidocs mkapidocs --help
 ```
 
 ## Usage

@@ -1,6 +1,6 @@
 # Python API Reference
 
-::: python_docs_init
+::: mkapidocs
     options:
       show_source: true
       members_order: source
