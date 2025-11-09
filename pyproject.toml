@@ -180,7 +180,11 @@ dev = [
 version_toml = ["pyproject.toml:project.version"]
 branch = "main"
 upload_to_vcs_release = true
-build_command = "uv build"
+# build_command removed: PEP 723 standalone scripts don't need building
+# The mkapidocs script file itself is the distribution artifact
+# See: https://peps.python.org/pep-0723/ - scripts designed to be shared directly
+# See: https://python-semantic-release.readthedocs.io/en/latest/configuration/automatic-releases/github-actions.html
+# The Docker action lacks build tools; build_command is optional for release tagging
 major_on_zero = false
 tag_format = "v{version}"
 
