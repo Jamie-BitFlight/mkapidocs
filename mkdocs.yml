@@ -1,5 +1,5 @@
-site_name: python_docs_init
-site_url: https://test.gitlab.com/pages/python_docs_init/
+site_name: mkapidocs
+site_url: https://jamie-bitflight.github.io/mkapidocs/
 
 theme:
   name: material
