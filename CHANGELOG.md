@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-11-09)
+
+### Bug Fixes
+
+- Update project name in pyproject.toml to match renamed script
+  ([`7848190`](https://github.com/Jamie-BitFlight/mkapidocs/commit/78481907231202180e0d625ee2b5dbec4bbb414f))
+
+The project was renamed from python-docs-init to mkapidocs, but pyproject.toml still had the old
+  name. This caused mkdocstrings to fail importing 'python_docs_init' module during documentation
+  build.
+
+Updated project name to 'mkapidocs' to match the script filename.
+
+
 ## v0.1.0 (2025-11-09)
 
 ### Bug Fixes
