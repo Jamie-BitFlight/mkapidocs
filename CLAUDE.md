@@ -44,6 +44,24 @@ The script is organized into distinct functional sections (mkapidocs.py:1-2396):
 3. Render Jinja2 templates with detected features
 4. Write generated files to target project directory
 
+## CLI Commands
+
+All commands follow the pattern: `./mkapidocs.py <command> [args]`
+
+- `version` - Show version information
+- `info` - Display package metadata and installation details
+- `setup <path>` - Set up MkDocs documentation for a Python project
+- `build <path>` - Build documentation to static site
+- `serve <path>` - Serve documentation with live preview
+
+**Examples:**
+```bash
+./mkapidocs.py version
+./mkapidocs.py setup /path/to/project
+./mkapidocs.py build . --strict
+./mkapidocs.py serve .
+```
+
 ## Development Commands
 
 ### Prerequisites
