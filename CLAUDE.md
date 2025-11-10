@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Required Skills
+
+**The orchestrator must load the python3-development skill before working on any task.**
+
+**The orchestrator must mention in the prompts provided to the sub-agents that the skills for mkdocs, hatchling, uv, and python3-development should be enabled before starting their task.**
+
 ## Project Overview
 
 mkapidocs is a PEP 723 standalone script that automates MkDocs documentation setup for Python projects. It's designed to be self-contained with no installation required - dependencies are declared inline using PEP 723 script metadata and managed by uv.
@@ -10,7 +16,7 @@ mkapidocs is a PEP 723 standalone script that automates MkDocs documentation set
 
 ### PEP 723 Standalone Script Model
 
-The main executable is `mkapidocs` - a single Python script with inline dependency declarations. This architecture means:
+The main executable is `mkapidocs.py` - a single Python script with inline dependency declarations. This architecture means:
 
 - **No package structure**: There's no `src/` or traditional Python package layout
 - **No setup.py/setup.cfg**: All metadata is in `pyproject.toml` for linting/testing only
@@ -19,7 +25,7 @@ The main executable is `mkapidocs` - a single Python script with inline dependen
 
 ### Key Components
 
-The script is organized into distinct functional sections (mkapidocs:1-2396):
+The script is organized into distinct functional sections (mkapidocs.py:1-2396):
 
 1. **Template System** (lines 62-430): Inline Jinja2 templates for all generated files (mkdocs.yml, GitHub Actions, markdown docs, gen_ref_pages.py)
 2. **Exception Classes** (lines 453-458): CLIError and BuildError for error handling
@@ -48,16 +54,16 @@ Ensure mkdocs skill is enabled at task start (this repo uses MkDocs for its own 
 
 ```bash
 # Run ruff linter
-uv run ruff check mkapidocs
+uv run ruff check mkapidocs.py
 
 # Run ruff formatter
-uv run ruff format mkapidocs
+uv run ruff format mkapidocs.py
 
 # Run mypy type checker
-uv run mypy mkapidocs
+uv run mypy mkapidocs.py
 
 # Run basedpyright type checker
-uv run basedpyright mkapidocs
+uv run basedpyright mkapidocs.py
 ```
 
 ### Testing
@@ -68,30 +74,30 @@ No test suite exists yet. When adding tests, they should go in `tests/` director
 
 ```bash
 # Direct execution (uses shebang)
-./mkapidocs --help
+./mkapidocs.py --help
 
 # Via uv (alternative)
-uv run mkapidocs --help
+uv run mkapidocs.py --help
 
 # Test on example project
-./mkapidocs setup /path/to/test/project
+./mkapidocs.py setup /path/to/test/project
 ```
 
 ### Building This Project's Documentation
 
 ```bash
 # Serve docs locally
-./mkapidocs serve .
+./mkapidocs.py serve .
 
 # Build static site
-./mkapidocs build .
+./mkapidocs.py build .
 ```
 
 ### Pre-commit Hooks
 
 The project uses pre-commit for automated quality checks. The configuration includes:
 
-- **mkapidocs-regen**: Runs `./mkapidocs setup .` to regenerate documentation when Python files, pyproject.toml, or mkdocs.yml change
+- **mkapidocs-regen**: Runs `./mkapidocs.py setup .` to regenerate documentation when Python files, pyproject.toml, or mkdocs.yml change
 - **Standard hooks**: trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml
 - **Ruff**: Python linting and formatting
 - **Mypy/Basedpyright**: Type checking with PEP 723 dependency installation
@@ -183,7 +189,7 @@ Generated `.github/workflows/pages.yml` uses:
 - `actions/checkout@v4` for code checkout
 - `actions/setup-python@v5` for Python 3.11 setup
 - `astral-sh/setup-uv@v4` for uv installation
-- Runs `uvx mkapidocs build . --strict` (uses uvx to fetch/run script)
+- Runs `./mkapidocs.py build . --strict` to build documentation
 - `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4` for GitHub Pages deployment
 - Deploys to GitHub Pages on pushes to main branch only
 
@@ -300,7 +306,7 @@ The script uses PEP 723 inline script metadata, which affects the development wo
 
 ### Dependencies
 
-All runtime dependencies are declared in the `# /// script` block at the top of the mkapidocs file (lines 2-15). These include:
+All runtime dependencies are declared in the `# /// script` block at the top of the mkapidocs.py file (lines 2-15). These include:
 - typer: CLI framework
 - jinja2: Template rendering
 - tomli-w: TOML writing
@@ -317,16 +323,16 @@ Development dependencies (linting, testing) are in pyproject.toml's `[dependency
 Type checkers (mypy, basedpyright) need access to PEP 723 dependencies:
 
 1. Pre-commit hook `install-pep723-deps` extracts dependencies from script block
-2. Runs `uv export --script mkapidocs | uv pip install -r -` to install them
+2. Runs `uv export --script mkapidocs.py | uv pip install -r -` to install them
 3. Then mypy/basedpyright can resolve imports during type checking
 
 ### Running Type Checkers Manually
 
 ```bash
 # Ensure PEP 723 deps are installed first
-uv export --script mkapidocs | uv pip install -r -
+uv export --script mkapidocs.py | uv pip install -r -
 
 # Then run type checkers
-uv run mypy mkapidocs
-uv run basedpyright mkapidocs
+uv run mypy mkapidocs.py
+uv run basedpyright mkapidocs.py
 ```

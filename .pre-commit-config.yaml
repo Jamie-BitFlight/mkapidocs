@@ -8,7 +8,7 @@ repos:
       - id: mkapidocs-regen
         name: Regenerate documentation
         description: Run mkapidocs setup to keep generated content in sync with code changes
-        entry: ./mkapidocs setup .
+        entry: ./mkapidocs.py setup .
         language: script
         files: ^(.*\.py|pyproject\.toml|mkdocs\.yml)$
         pass_filenames: false
