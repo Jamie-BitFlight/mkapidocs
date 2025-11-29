@@ -64,12 +64,14 @@ validation = [
 ```
 
 **Rationale**:
+
 - `griffe`: Same engine as mkdocstrings, ensures consistency with generated docs
 - `interrogate`: Industry-standard docstring coverage tool, CLI-friendly
 - `beautifulsoup4` + `lxml`: Robust HTML parsing for link validation
 - **Deferred to Phase 2**: `watchdog` (watch mode), Doxygen XML parsing
 
 **Installation Command**:
+
 ```bash
 uv sync --extra validation
 ```
@@ -85,6 +87,7 @@ uv sync --extra validation
 **Dependencies**: None
 
 **Subtasks**:
+
 1. Create directory structure (30 min)
    - Create `validators/` directory
    - Create `reporters/` directory
@@ -111,12 +114,14 @@ uv sync --extra validation
    - Export base types
 
 **Acceptance Criteria**:
+
 - Directory structure exists
 - Base types are importable: `from python_docs_init.validators.base import ValidationResult`
 - All type hints pass `mypy --strict`
 - 100% test coverage for base types
 
 **Testing Strategy**:
+
 ```python
 def test_validation_result_creation():
     """Test ValidationResult can be created with all fields."""
@@ -148,6 +153,7 @@ def test_validation_check_protocol():
 **Dependencies**: TASK-001
 
 **Subtasks**:
+
 1. Create `validators/build.py` (3 hours)
    - Function: `validate_build(repo_path: Path) -> ValidationResult`
    - Run `mkdocs build --strict` via subprocess
@@ -173,6 +179,7 @@ def test_validation_check_protocol():
      - `warnings`: list of warning messages with context
 
 **Implementation Notes**:
+
 ```python
 def validate_build(repo_path: Path) -> ValidationResult:
     """Validate that mkdocs build succeeds with --strict mode.
@@ -214,6 +221,7 @@ def validate_build(repo_path: Path) -> ValidationResult:
 ```
 
 **Acceptance Criteria**:
+
 - Successfully detects mkdocs build failures
 - Parses and categorizes errors vs warnings
 - Reports build duration
@@ -221,6 +229,7 @@ def validate_build(repo_path: Path) -> ValidationResult:
 - Works with real python_picotool repository
 
 **Testing Strategy**:
+
 ```python
 def test_build_validator_success(tmp_path):
     """Test build validator with valid mkdocs project."""
@@ -259,6 +268,7 @@ def test_build_validator_broken_link(tmp_path):
 **Dependencies**: TASK-001
 
 **Subtasks**:
+
 1. Implement griffe-based introspection (4 hours)
    - Use `griffe.load()` to load Python package
    - Traverse module tree to find all public functions/classes/methods
@@ -280,6 +290,7 @@ def test_build_validator_broken_link(tmp_path):
    - Generate actionable fix suggestions
 
 **Implementation Notes**:
+
 ```python
 def validate_python_api(repo_path: Path, package_name: str) -> ValidationResult:
     """Validate Python API documentation coverage.
@@ -336,14 +347,16 @@ def validate_python_api(repo_path: Path, package_name: str) -> ValidationResult:
 ```
 
 **Acceptance Criteria**:
+
 - Accurately counts public functions/classes/methods
 - Correctly identifies missing docstrings
 - Reports coverage percentage
 - Provides file path and line number for missing items
-- Handles edge cases (empty packages, __init__.py only)
+- Handles edge cases (empty packages, **init**.py only)
 - Coverage threshold configurable (default 80%)
 
 **Testing Strategy**:
+
 ```python
 def test_python_api_validator_full_coverage(tmp_path):
     """Test validator with 100% documented package."""
@@ -385,6 +398,7 @@ def test_python_api_validator_type_hints(tmp_path):
 **Dependencies**: TASK-002 (needs built site/)
 
 **Subtasks**:
+
 1. HTML parsing with BeautifulSoup (2 hours)
    - Parse all HTML files in `site/` directory
    - Extract all `<a href="...">` links
@@ -403,6 +417,7 @@ def test_python_api_validator_type_hints(tmp_path):
    - Check for orphaned .md files not in nav
 
 **Implementation Notes**:
+
 ```python
 def validate_links(repo_path: Path) -> ValidationResult:
     """Validate internal links in built documentation.
@@ -463,6 +478,7 @@ def validate_links(repo_path: Path) -> ValidationResult:
 ```
 
 **Acceptance Criteria**:
+
 - Detects broken internal links
 - Handles fragment identifiers (#anchors)
 - Reports source file and broken link
@@ -470,6 +486,7 @@ def validate_links(repo_path: Path) -> ValidationResult:
 - Handles edge cases (missing site/ directory, malformed HTML)
 
 **Testing Strategy**:
+
 ```python
 def test_link_validator_no_broken_links(tmp_path):
     """Test validator with all valid links."""
@@ -509,6 +526,7 @@ def test_link_validator_fragment_validation(tmp_path):
 **Dependencies**: TASK-001, TASK-002, TASK-003, TASK-004
 
 **Subtasks**:
+
 1. Expand existing `validate()` command in `cli.py` (2 hours)
    - Remove placeholder implementation
    - Add command options:
@@ -531,6 +549,7 @@ def test_link_validator_fragment_validation(tmp_path):
    - Format results with console reporter
 
 **Implementation Notes**:
+
 ```python
 @app.command()
 def validate(
@@ -608,6 +627,7 @@ def validate(
 ```
 
 **Acceptance Criteria**:
+
 - Command `python_docs_init validate .` works
 - `--check` option filters which validators run
 - `--strict` mode causes warnings to fail the build
@@ -616,6 +636,7 @@ def validate(
 - Proper exit codes (0=success, 1=errors, 2=warnings in strict)
 
 **Testing Strategy**:
+
 ```python
 def test_validate_command_success(cli_runner, tmp_path):
     """Test validate command with passing repository."""
@@ -653,6 +674,7 @@ def test_validate_command_strict_mode(cli_runner, tmp_path):
 **Dependencies**: TASK-001
 
 **Subtasks**:
+
 1. Implement ConsoleReporter class (3 hours)
    - Implement `Reporter` Protocol
    - Format validation results with Rich components
@@ -673,6 +695,7 @@ def test_validate_command_strict_mode(cli_runner, tmp_path):
    - Next steps and recommendations
 
 **Implementation Notes**:
+
 ```python
 from rich.console import Console
 from rich.table import Table
@@ -769,6 +792,7 @@ class ConsoleReporter:
 ```
 
 **Acceptance Criteria**:
+
 - Clear, readable console output with Rich formatting
 - Status indicators (✅ ⚠️ ❌) for each check
 - Errors and warnings clearly separated
@@ -778,6 +802,7 @@ class ConsoleReporter:
 - Output respects NO_COLOR environment variable
 
 **Testing Strategy**:
+
 ```python
 def test_console_reporter_pass_status(capsys):
     """Test console reporter with passing validation."""
@@ -825,6 +850,7 @@ def test_console_reporter_quick_fix(capsys):
 **Dependencies**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006
 
 **Subtasks**:
+
 1. Set up python_picotool test environment (1 hour)
    - Clone python_picotool repository
    - Install dependencies with `uv sync --extra docs --extra validation`
@@ -849,6 +875,7 @@ def test_console_reporter_quick_fix(capsys):
    - Add integration test using python_picotool structure
 
 **Acceptance Criteria**:
+
 - Validation runs successfully on python_picotool
 - Results are accurate and actionable
 - No false positives or false negatives
@@ -856,6 +883,7 @@ def test_console_reporter_quick_fix(capsys):
 - Console output is clear and helpful
 
 **Testing Strategy**:
+
 ```python
 def test_validate_python_picotool_integration():
     """Integration test with real python_picotool repository."""
@@ -907,6 +935,7 @@ graph TD
 **Critical Path**: TASK-001 → TASK-002/003/006 → TASK-005 → TASK-007
 
 **Parallel Opportunities**:
+
 - TASK-002, TASK-003, and TASK-006 can be implemented in parallel after TASK-001
 - TASK-004 can start after TASK-002 is complete
 
@@ -915,26 +944,31 @@ graph TD
 ## Daily Schedule
 
 ### Day 1 (Monday): Foundation
+
 - **Morning**: TASK-001 (Module Structure) - 4 hours
 - **Afternoon**: Start TASK-002 (Build Validator) - 4 hours
 - **End of Day**: Module structure complete, build validator in progress
 
 ### Day 2 (Tuesday): Core Validators
+
 - **Morning**: Finish TASK-002 (Build Validator) - 2 hours
 - **Afternoon**: TASK-003 (Python API Validator) - 6 hours
 - **End of Day**: Build and Python validators complete
 
 ### Day 3 (Wednesday): Links and Reporting
+
 - **Morning**: TASK-006 (Console Reporter) - 6 hours
 - **Afternoon**: TASK-004 (Link Checker) - 2 hours
 - **End of Day**: Reporter and link checker in progress
 
 ### Day 4 (Thursday): Integration
+
 - **Morning**: Finish TASK-004 (Link Checker) - 4 hours
 - **Afternoon**: TASK-005 (CLI Command) - 4 hours
 - **End of Day**: All validators integrated into CLI
 
 ### Day 5 (Friday): Testing and Polish
+
 - **Morning**: TASK-007 (Integration Testing) - 4 hours
 - **Afternoon**: Bug fixes, documentation, code review - 4 hours
 - **End of Day**: Phase 1 complete and tested
@@ -962,6 +996,7 @@ graph TD
 ### Validator-Specific Testing
 
 #### Build Validator Testing
+
 ```python
 # tests/validators/test_build.py
 
@@ -986,6 +1021,7 @@ def test_build_validator_warning_handling(tmp_path):
 ```
 
 #### Python API Validator Testing
+
 ```python
 # tests/validators/test_python_api.py
 
@@ -1011,6 +1047,7 @@ def test_python_api_validator_private_members_excluded(tmp_path):
 ```
 
 #### Link Checker Testing
+
 ```python
 # tests/validators/test_links.py
 
@@ -1036,6 +1073,7 @@ def test_link_validator_external_links_skipped(tmp_path):
 ```
 
 #### Console Reporter Testing
+
 ```python
 # tests/reporters/test_console.py
 
@@ -1120,6 +1158,7 @@ Phase 1 is considered complete when:
 ## Next Steps (Phase 2 Preview)
 
 After Phase 1 completion, Phase 2 will add:
+
 - C API validator with Doxygen XML parsing
 - CLI validator using Typer introspection
 - Supporting docs checker (install.md, contributing.md, etc.)
@@ -1197,6 +1236,7 @@ class UndocumentedClass:  # Missing class docstring
 ## File Count Summary
 
 **New Files**: 23
+
 - **Validators**: 5 files (base.py, build.py, python_api.py, links.py, coverage.py)
 - **Reporters**: 2 files (base.py, console.py)
 - **Core**: 1 file (validate.py)
@@ -1204,6 +1244,7 @@ class UndocumentedClass:  # Missing class docstring
 - **Modified**: 2 files (cli.py, pyproject.toml)
 
 **Lines of Code Estimate**: ~2,000 lines total
+
 - Validators: ~800 lines
 - Reporters: ~400 lines
 - Tests: ~600 lines

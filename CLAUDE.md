@@ -50,14 +50,39 @@ All commands follow the pattern: `./mkapidocs.py <command> [args]`
 
 - `version` - Show version information
 - `info` - Display package metadata and installation details
-- `setup <path>` - Set up MkDocs documentation for a Python project
+- `setup <path> [--provider {github|gitlab}]` - Set up MkDocs documentation for a Python project
 - `build <path>` - Build documentation to static site
 - `serve <path>` - Serve documentation with live preview
 
+### setup Command
+
+The `setup` command configures MkDocs documentation and CI/CD workflows for your project.
+
+**Provider Auto-Detection:**
+
+1. First: Checks git remote URL for `github.com` or `gitlab.com`
+2. Second: Checks filesystem for `.gitlab-ci.yml`, `.gitlab/`, or `.github/` directories
+3. Third: Fails with error if provider cannot be determined
+
+**Options:**
+
+- `--provider {github|gitlab}` - Explicitly specify CI/CD provider (bypasses auto-detection)
+- `--github-url-base <url>` - Override GitHub Pages URL (for backward compatibility)
+
 **Examples:**
+
 ```bash
-./mkapidocs.py version
+# Auto-detect provider from git remote or filesystem
 ./mkapidocs.py setup /path/to/project
+
+# Explicitly use GitHub Actions
+./mkapidocs.py setup /path/to/project --provider github
+
+# Explicitly use GitLab CI
+./mkapidocs.py setup /path/to/project --provider gitlab
+
+# Other commands
+./mkapidocs.py version
 ./mkapidocs.py build . --strict
 ./mkapidocs.py serve .
 ```
@@ -325,6 +350,7 @@ The script uses PEP 723 inline script metadata, which affects the development wo
 ### Dependencies
 
 All runtime dependencies are declared in the `# /// script` block at the top of the mkapidocs.py file (lines 2-15). These include:
+
 - typer: CLI framework
 - jinja2: Template rendering
 - tomli-w: TOML writing

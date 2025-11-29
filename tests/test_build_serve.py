@@ -98,7 +98,9 @@ class TestBuildDocs:
         cmd = mock_subprocess.call_args[0][0]
         assert "--strict" in cmd
 
-    def test_build_docs_with_custom_output_dir(self, mocker: MockerFixture, mock_repo_path: Path, tmp_path: Path) -> None:
+    def test_build_docs_with_custom_output_dir(
+        self, mocker: MockerFixture, mock_repo_path: Path, tmp_path: Path
+    ) -> None:
         """Test build with custom output directory.
 
         Tests: build_docs(output_dir=custom_path)
@@ -215,14 +217,12 @@ class TestBuildDocs:
         build_docs(mock_repo_path)
 
         # Assert
-        gen_ref_script = docs_dir / "gen_ref_pages.py"
+        gen_ref_script = docs_dir / "generated" / "gen_ref_pages.py"
         assert gen_ref_script.exists()
         content = gen_ref_script.read_text()
         assert "mkdocs-gen-files" in content or "gen_files" in content
 
-    def test_build_docs_sets_pythonpath_from_source_paths(
-        self, mocker: MockerFixture, mock_repo_path: Path
-    ) -> None:
+    def test_build_docs_sets_pythonpath_from_source_paths(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test build sets PYTHONPATH environment variable from pyproject.toml.
 
         Tests: build_docs() PYTHONPATH configuration
@@ -491,12 +491,10 @@ class TestServeDocs:
         serve_docs(mock_repo_path)
 
         # Assert
-        gen_ref_script = docs_dir / "gen_ref_pages.py"
+        gen_ref_script = docs_dir / "generated" / "gen_ref_pages.py"
         assert gen_ref_script.exists()
 
-    def test_serve_docs_sets_pythonpath_from_source_paths(
-        self, mocker: MockerFixture, mock_repo_path: Path
-    ) -> None:
+    def test_serve_docs_sets_pythonpath_from_source_paths(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test serve sets PYTHONPATH environment variable from pyproject.toml.
 
         Tests: serve_docs() PYTHONPATH configuration

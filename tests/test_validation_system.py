@@ -737,7 +737,7 @@ class TestProjectValidator:
         """Test check_c_code detects C/C++ source files.
 
         Tests: ProjectValidator.check_c_code()
-        How: Mock detect_c_code to return True
+        How: Mock detect_c_code to return list with source directory
         Why: Verify C code detection integration
 
         Args:
@@ -745,7 +745,7 @@ class TestProjectValidator:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        mocker.patch("mkapidocs.detect_c_code", return_value=True)
+        mocker.patch("mkapidocs.detect_c_code", return_value=[mock_repo_path / "source"])
         validator = ProjectValidator()(mock_repo_path)
 
         # Act
@@ -753,14 +753,15 @@ class TestProjectValidator:
 
         # Assert
         assert result.passed is True
-        assert "Found in source/ directory" in result.message
+        assert "Found in:" in result.message
+        assert "source" in result.message
         assert result.value == "Doxygen required"
 
     def test_check_c_code_not_found(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test check_c_code returns passing result when no C code.
 
         Tests: ProjectValidator.check_c_code()
-        How: Mock detect_c_code to return False
+        How: Mock detect_c_code to return empty list
         Why: Verify optional C code detection doesn't fail without C code
 
         Args:
@@ -768,7 +769,7 @@ class TestProjectValidator:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        mocker.patch("mkapidocs.detect_c_code", return_value=False)
+        mocker.patch("mkapidocs.detect_c_code", return_value=[])
         validator = ProjectValidator()(mock_repo_path)
 
         # Act

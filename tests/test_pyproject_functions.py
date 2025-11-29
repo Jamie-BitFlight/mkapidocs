@@ -89,12 +89,7 @@ class TestWritePyproject:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        config = {
-            "project": {
-                "name": "new-project",
-                "version": "1.0.0",
-            }
-        }
+        config = {"project": {"name": "new-project", "version": "1.0.0"}}
 
         # Act
         write_pyproject(mock_repo_path, config)
@@ -120,12 +115,7 @@ class TestWritePyproject:
             mock_pyproject_toml: Existing mock pyproject.toml
         """
         # Arrange
-        new_config = {
-            "project": {
-                "name": "updated-project",
-                "version": "2.0.0",
-            }
-        }
+        new_config = {"project": {"name": "updated-project", "version": "2.0.0"}}
 
         # Act
         write_pyproject(mock_pyproject_toml.parent, new_config)
@@ -314,16 +304,7 @@ class TestUpdateRuffConfig:
 
         """
         # Arrange
-        config = {
-            "project": {"name": "test"},
-            "tool": {
-                "ruff": {
-                    "lint": {
-                        "select": ["E", "F", "I"]
-                    }
-                }
-            }
-        }
+        config = {"project": {"name": "test"}, "tool": {"ruff": {"lint": {"select": ["E", "F", "I"]}}}}
 
         # Act
         updated = update_ruff_config(config)

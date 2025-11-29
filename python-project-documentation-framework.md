@@ -1,4 +1,5 @@
 # Python Project Documentation Framework
+
 ## Automated MkDocs Documentation Generation and GitLab Pages Deployment
 
 **Version:** 1.0
@@ -12,6 +13,7 @@
 This framework standardizes documentation generation for Python projects using MkDocs Material, mkdocstrings, and GitLab CI/CD. It enables automatic API documentation generation from Python docstrings, professional documentation websites, and seamless GitLab Pages deployment.
 
 **Key Benefits:**
+
 - **Zero-maintenance API docs**: Automatically generated from Python docstrings
 - **Professional appearance**: Material Design theme with search, navigation, and social cards
 - **CI/CD integration**: Automatic deployment to GitLab Pages on every commit
@@ -19,6 +21,7 @@ This framework standardizes documentation generation for Python projects using M
 - **Type-safe**: Integrates with Python type hints for accurate documentation
 
 **Sources:**
+
 - MkDocs official documentation: `/mkdocs/mkdocs` (Context7, 529 code snippets, trust score 7.6)
 - Material for MkDocs: `/squidfunk/mkdocs-material` (932 code snippets)
 - MkDocstrings: `/mkdocstrings/mkdocstrings` (91 code snippets, trust score 7.5)
@@ -110,6 +113,7 @@ docs = [
 ```
 
 **Rationale:**
+
 - **mkdocs-material**: Most popular theme, 5M+ monthly downloads (verified from Exa search)
 - **mkdocstrings[python]**: Auto-generates API docs from Python code
 - **Version pinning**: Use `>=` for minor updates, test major versions separately
@@ -164,6 +168,7 @@ project_root/
 ```
 
 **Key Principles:**
+
 - Keep docs/ separate from source code
 - Use semantic folder names (user-guide/, api-reference/)
 - Place assets in docs/assets/ for proper resolution
@@ -184,7 +189,7 @@ site_url: https://<namespace>.gitlab.io/<project>/
 # Repository
 repo_url: https://gitlab.com/<namespace>/<project>
 repo_name: <namespace>/<project>
-edit_uri: -/edit/main/docs/  # GitLab edit path
+edit_uri: -/edit/main/docs/ # GitLab edit path
 
 # Copyright
 copyright: Copyright &copy; 2025 Your Organization
@@ -227,30 +232,30 @@ theme:
 
   # Features
   features:
-    - announce.dismiss              # Dismissable announcements
-    - content.action.edit           # Edit button on pages
-    - content.action.view           # View source button
-    - content.code.copy             # Copy button for code blocks
-    - content.code.annotate         # Code annotations
-    - content.tabs.link             # Link tabs across pages
-    - content.tooltips              # Improved tooltips
-    - navigation.expand             # Expand navigation by default
-    - navigation.footer             # Footer navigation
-    - navigation.indexes            # Section index pages
-    - navigation.instant            # Instant loading (SPA-like)
-    - navigation.instant.prefetch   # Prefetch pages for speed
-    - navigation.instant.progress   # Show loading progress bar
-    - navigation.path               # Breadcrumb navigation
-    - navigation.sections           # Group navigation sections
-    - navigation.tabs               # Top-level tabs
-    - navigation.tabs.sticky        # Sticky navigation tabs
-    - navigation.top                # Back-to-top button
-    - navigation.tracking           # Anchor tracking in URL
-    - search.highlight              # Highlight search terms
-    - search.share                  # Share search link
-    - search.suggest                # Search suggestions
-    - toc.follow                    # Follow TOC with scroll
-    - toc.integrate                 # Integrate TOC in navigation
+    - announce.dismiss # Dismissable announcements
+    - content.action.edit # Edit button on pages
+    - content.action.view # View source button
+    - content.code.copy # Copy button for code blocks
+    - content.code.annotate # Code annotations
+    - content.tabs.link # Link tabs across pages
+    - content.tooltips # Improved tooltips
+    - navigation.expand # Expand navigation by default
+    - navigation.footer # Footer navigation
+    - navigation.indexes # Section index pages
+    - navigation.instant # Instant loading (SPA-like)
+    - navigation.instant.prefetch # Prefetch pages for speed
+    - navigation.instant.progress # Show loading progress bar
+    - navigation.path # Breadcrumb navigation
+    - navigation.sections # Group navigation sections
+    - navigation.tabs # Top-level tabs
+    - navigation.tabs.sticky # Sticky navigation tabs
+    - navigation.top # Back-to-top button
+    - navigation.tracking # Anchor tracking in URL
+    - search.highlight # Highlight search terms
+    - search.share # Share search link
+    - search.suggest # Search suggestions
+    - toc.follow # Follow TOC with scroll
+    - toc.integrate # Integrate TOC in navigation
 
 # Plugins
 plugins:
@@ -301,13 +306,13 @@ plugins:
 # Markdown extensions
 markdown_extensions:
   # Python Markdown extensions
-  - abbr                    # Abbreviations
-  - admonition              # Call-outs
-  - attr_list               # Add HTML attributes
-  - def_list                # Definition lists
-  - footnotes               # Footnotes
-  - md_in_html              # Markdown in HTML
-  - tables                  # Tables
+  - abbr # Abbreviations
+  - admonition # Call-outs
+  - attr_list # Add HTML attributes
+  - def_list # Definition lists
+  - footnotes # Footnotes
+  - md_in_html # Markdown in HTML
+  - tables # Tables
   - toc:
       permalink: true
       permalink_title: Anchor link to this section
@@ -318,11 +323,11 @@ markdown_extensions:
       generic: true
   - pymdownx.betterem:
       smart_enable: all
-  - pymdownx.caret          # Superscript
-  - pymdownx.mark           # Highlighting
-  - pymdownx.tilde          # Strikethrough
-  - pymdownx.critic         # Track changes
-  - pymdownx.details        # Collapsible admonitions
+  - pymdownx.caret # Superscript
+  - pymdownx.mark # Highlighting
+  - pymdownx.tilde # Strikethrough
+  - pymdownx.critic # Track changes
+  - pymdownx.details # Collapsible admonitions
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -331,14 +336,14 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
       use_pygments: true
-  - pymdownx.inlinehilite   # Inline code highlighting
-  - pymdownx.keys           # Keyboard keys
+  - pymdownx.inlinehilite # Inline code highlighting
+  - pymdownx.keys # Keyboard keys
   - pymdownx.magiclink:
       repo_url_shortener: true
       repo_url_shorthand: true
       social_url_shorthand: true
       normalize_issue_symbols: true
-  - pymdownx.smartsymbols   # Smart symbols
+  - pymdownx.smartsymbols # Smart symbols
   - pymdownx.snippets:
       check_paths: true
   - pymdownx.superfences:
@@ -370,13 +375,13 @@ nav:
 # Extra configuration
 extra:
   version:
-    provider: mike  # Optional: versioning support
+    provider: mike # Optional: versioning support
   social:
     - icon: fontawesome/brands/gitlab
       link: https://gitlab.com/<namespace>/<project>
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/<project>/
-  generator: false  # Hide "Made with Material for MkDocs"
+  generator: false # Hide "Made with Material for MkDocs"
 
 # Extra CSS/JS (optional)
 extra_css:
@@ -405,11 +410,11 @@ extra_javascript:
 # Workflow rules - when to run pipeline
 workflow:
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH  # Only on main/master
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # Only on main/master
       when: always
-    - if: $CI_MERGE_REQUEST_IID                     # On merge requests
+    - if: $CI_MERGE_REQUEST_IID # On merge requests
       when: always
-    - when: never                                    # Explicit deny for other cases
+    - when: never # Explicit deny for other cases
 
 # Stages definition
 stages:
@@ -463,10 +468,10 @@ pages:
   artifacts:
     paths:
       - public
-    expire_in: never  # Pages artifacts don't expire
+    expire_in: never # Pages artifacts don't expire
 
   pages:
-    path_prefix: ""  # No path prefix (root deployment)
+    path_prefix: "" # No path prefix (root deployment)
 
   environment:
     name: production
@@ -491,6 +496,7 @@ pages:
 4. **index.html**: Must exist in root of published directory
 
 **Pipeline Flow:**
+
 1. `build:docs` stage: Install deps, run `mkdocs build`, save `site/` artifact
 2. `pages` stage: Rename `site/` to `public/`, publish as GitLab Pages artifact
 3. GitLab automatically deploys `public/` to Pages infrastructure
@@ -509,27 +515,26 @@ pages:
 ## PicoDeviceDiscovery
 
 ::: python_picotool.core.device.PicoDeviceDiscovery
-    options:
-      show_source: true
-      members:
-        - find_device
-        - list_devices
-      show_root_heading: false
-      heading_level: 3
+options:
+show_source: true
+members: - find_device - list_devices
+show_root_heading: false
+heading_level: 3
 
 ## PicobootFlasher
 
 ::: python_picotool.core.flasher.PicobootFlasher
-    options:
-      show_source: true
-      members: true
-      show_root_heading: false
-      heading_level: 3
+options:
+show_source: true
+members: true
+show_root_heading: false
+heading_level: 3
 ```
 
 **Syntax:** `::: <module_path>`
 
 **Options:**
+
 - `show_source`: Include source code
 - `members`: Auto-document members (True/False/list)
 - `show_root_heading`: Include class/module heading
@@ -650,6 +655,7 @@ def flash_firmware(
 ```
 
 **Key sections:**
+
 - Brief summary (first line)
 - Extended description (optional paragraph)
 - Args/Parameters
@@ -667,6 +673,7 @@ def flash_firmware(
 - **Developer-facing**: Contributing, architecture, testing
 
 **Write progressively:**
+
 1. Start with getting-started guide (quick win)
 2. Add comprehensive user guides
 3. Generate API reference automatically
@@ -721,13 +728,13 @@ test:docs:
 
 ### Common Issues
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| `pages` job fails with "No public/ directory" | Artifact path incorrect | Ensure `mv site public` in pages job |
-| 404 on GitLab Pages | `site_url` incorrect | Match `site_url` to GitLab Pages pattern |
-| API docs not generating | mkdocstrings config error | Verify `::: module.path` syntax, check module imports |
-| Theme not loading | Missing dependencies | Run `pip install mkdocs-material[imaging]` |
-| Build fails on CI but works locally | Dependency mismatch | Pin versions in pyproject.toml, use `uv` for reproducibility |
+| Issue                                         | Cause                     | Solution                                                     |
+| --------------------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| `pages` job fails with "No public/ directory" | Artifact path incorrect   | Ensure `mv site public` in pages job                         |
+| 404 on GitLab Pages                           | `site_url` incorrect      | Match `site_url` to GitLab Pages pattern                     |
+| API docs not generating                       | mkdocstrings config error | Verify `::: module.path` syntax, check module imports        |
+| Theme not loading                             | Missing dependencies      | Run `pip install mkdocs-material[imaging]`                   |
+| Build fails on CI but works locally           | Dependency mismatch       | Pin versions in pyproject.toml, use `uv` for reproducibility |
 
 ### Debugging Commands
 
@@ -767,11 +774,13 @@ name = "material"
 ```
 
 **Pros:**
+
 - Single configuration file (pyproject.toml)
 - Automatic module discovery
 - Integrated pdoc3 for code documentation
 
 **Cons:**
+
 - Less flexible than standalone mkdocs + mkdocstrings
 - Smaller community (lower maintenance)
 - Fewer customization options
@@ -786,11 +795,13 @@ name = "material"
 Python documentation standard, used by Python itself:
 
 **Pros:**
+
 - Industry standard (Python, NumPy, Django use it)
 - Extensive plugin ecosystem
 - Multi-format output (HTML, PDF, ePub)
 
 **Cons:**
+
 - Steeper learning curve (reStructuredText)
 - More complex configuration
 - Less modern UI out-of-box
@@ -821,6 +832,7 @@ python:
 ## Implementation Checklist
 
 ### Initial Setup
+
 - [ ] Add docs dependencies to pyproject.toml
 - [ ] Create docs/ directory structure
 - [ ] Create mkdocs.yml with Material theme
@@ -828,12 +840,14 @@ python:
 - [ ] Configure GitLab CI .gitlab-ci.yml
 
 ### Content Creation
+
 - [ ] Getting Started guide
 - [ ] User guide pages
 - [ ] API reference structure (mkdocstrings)
 - [ ] Developer/contributing guide
 
 ### Quality Assurance
+
 - [ ] Test locally with `mkdocs serve`
 - [ ] Verify all nav links work
 - [ ] Check API docs generate correctly
@@ -841,6 +855,7 @@ python:
 - [ ] Verify GitLab Pages deployment
 
 ### Maintenance
+
 - [ ] Set up automated link checking
 - [ ] Configure documentation versioning (if needed)
 - [ ] Add badges to README linking to docs
@@ -853,6 +868,7 @@ python:
 This framework provides a production-ready, scalable approach to Python project documentation. By combining MkDocs Material, mkdocstrings, and GitLab CI/CD, teams can maintain high-quality documentation with minimal manual effort.
 
 **Next Steps:**
+
 1. Copy template files to your project
 2. Customize mkdocs.yml for your project
 3. Write initial documentation pages
@@ -860,6 +876,7 @@ This framework provides a production-ready, scalable approach to Python project 
 5. Commit and push to trigger deployment
 
 **Support & Resources:**
+
 - MkDocs documentation: https://www.mkdocs.org/
 - Material for MkDocs: https://squidfunk.github.io/mkdocs-material/
 - mkdocstrings: https://mkdocstrings.github.io/
@@ -868,6 +885,7 @@ This framework provides a production-ready, scalable approach to Python project 
 ---
 
 **Document Metadata:**
+
 - Framework Version: 1.0
 - Research Sources: Context7 (MkDocs, Material, mkdocstrings), GitLab Docs, Exa web search, GitHub code search
 - Validation: Based on production deployments (Typer, multiple organizations)

@@ -56,7 +56,7 @@ class TestGitHubURLDetection:
         """Test GitHub URL detection with SSH remote format.
 
         Tests: detect_github_url_base parses SSH git URLs correctly
-        How: Mock subprocess to return SSH format git URL
+        How: Create .git/config file with SSH format git URL
         Why: GitHub SSH remotes are common, must parse to Pages URL
 
         Args:
@@ -64,10 +64,14 @@ class TestGitHubURLDetection:
             mocker: pytest-mock fixture
         """
         # Arrange
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "git@github.com:test-owner/test-repo.git\n"
-        mocker.patch("subprocess.run", return_value=mock_result)
+        git_dir = mock_repo_path / ".git"
+        git_dir.mkdir()
+        git_config = git_dir / "config"
+        git_config.write_text(
+            '[remote "origin"]\n'
+            "\turl = git@github.com:test-owner/test-repo.git\n"
+            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        )
 
         # Act
         result = detect_github_url_base(mock_repo_path)
@@ -79,7 +83,7 @@ class TestGitHubURLDetection:
         """Test GitHub URL detection with HTTPS remote format.
 
         Tests: detect_github_url_base parses HTTPS git URLs correctly
-        How: Mock subprocess to return HTTPS format git URL
+        How: Create .git/config file with HTTPS format git URL
         Why: GitHub HTTPS remotes are common, must parse to Pages URL
 
         Args:
@@ -87,10 +91,14 @@ class TestGitHubURLDetection:
             mocker: pytest-mock fixture
         """
         # Arrange
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "https://github.com/test-owner/test-repo.git\n"
-        mocker.patch("subprocess.run", return_value=mock_result)
+        git_dir = mock_repo_path / ".git"
+        git_dir.mkdir()
+        git_config = git_dir / "config"
+        git_config.write_text(
+            '[remote "origin"]\n'
+            "\turl = https://github.com/test-owner/test-repo.git\n"
+            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        )
 
         # Act
         result = detect_github_url_base(mock_repo_path)
@@ -102,7 +110,7 @@ class TestGitHubURLDetection:
         """Test GitHub URL detection with SSH format without .git suffix.
 
         Tests: detect_github_url_base handles URLs without .git extension
-        How: Mock subprocess to return SSH URL without .git
+        How: Create .git/config file with SSH URL without .git
         Why: Some repositories use remote URLs without .git suffix
 
         Args:
@@ -110,10 +118,14 @@ class TestGitHubURLDetection:
             mocker: pytest-mock fixture
         """
         # Arrange
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "git@github.com:test-owner/test-repo\n"
-        mocker.patch("subprocess.run", return_value=mock_result)
+        git_dir = mock_repo_path / ".git"
+        git_dir.mkdir()
+        git_config = git_dir / "config"
+        git_config.write_text(
+            '[remote "origin"]\n'
+            "\turl = git@github.com:test-owner/test-repo\n"
+            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        )
 
         # Act
         result = detect_github_url_base(mock_repo_path)
@@ -171,14 +183,14 @@ class TestGitHubURLDetection:
 class TestCCodeDetection:
     """Test suite for C/C++ code detection in repository.
 
-    Tests the detect_c_code function which checks for C/C++ files
-    in the source/ directory.
+    Tests the detect_c_code function which returns list of directories
+    containing C/C++ files.
     """
 
     def test_detect_c_code_with_c_files(self, mock_c_code_repo: Path) -> None:
         """Test C code detection when .c files present.
 
-        Tests: detect_c_code returns True for repositories with C files
+        Tests: detect_c_code returns list with source/ directory for repositories with C files
         How: Use mock_c_code_repo fixture with .c and .h files
         Why: C files should trigger Doxygen documentation
 
@@ -189,12 +201,13 @@ class TestCCodeDetection:
         result = detect_c_code(mock_c_code_repo)
 
         # Assert
-        assert result is True
+        assert len(result) == 1
+        assert result[0] == mock_c_code_repo / "source"
 
     def test_detect_c_code_with_cpp_files(self, mock_repo_path: Path) -> None:
         """Test C code detection when .cpp files present.
 
-        Tests: detect_c_code returns True for C++ files
+        Tests: detect_c_code returns list with source/ directory for C++ files
         How: Create source/ directory with .cpp and .hpp files
         Why: C++ files should also trigger Doxygen documentation
 
@@ -204,19 +217,20 @@ class TestCCodeDetection:
         # Arrange
         source_dir = mock_repo_path / "source"
         source_dir.mkdir()
-        (source_dir / "main.cpp").write_text('int main() { return 0; }')
-        (source_dir / "utils.hpp").write_text('#ifndef UTILS_HPP\n#define UTILS_HPP\n#endif')
+        (source_dir / "main.cpp").write_text("int main() { return 0; }")
+        (source_dir / "utils.hpp").write_text("#ifndef UTILS_HPP\n#define UTILS_HPP\n#endif")
 
         # Act
         result = detect_c_code(mock_repo_path)
 
         # Assert
-        assert result is True
+        assert len(result) == 1
+        assert result[0] == source_dir.resolve()
 
     def test_detect_c_code_no_source_directory(self, mock_repo_path: Path) -> None:
         """Test C code detection when source/ directory missing.
 
-        Tests: detect_c_code returns False without source/ directory
+        Tests: detect_c_code returns empty list without source/ directory
         How: Use repo without creating source/ directory
         Why: Function should handle missing directory gracefully
 
@@ -227,12 +241,12 @@ class TestCCodeDetection:
         result = detect_c_code(mock_repo_path)
 
         # Assert
-        assert result is False
+        assert result == []
 
     def test_detect_c_code_source_dir_exists_no_c_files(self, mock_repo_path: Path) -> None:
         """Test C code detection when source/ exists but no C files.
 
-        Tests: detect_c_code returns False with only Python files in source/
+        Tests: detect_c_code returns empty list with only Python files in source/
         How: Create source/ with .py files
         Why: Should only detect C/C++ extensions
 
@@ -243,13 +257,13 @@ class TestCCodeDetection:
         source_dir = mock_repo_path / "source"
         source_dir.mkdir()
         (source_dir / "script.py").write_text('print("hello")')
-        (source_dir / "data.txt").write_text('some data')
+        (source_dir / "data.txt").write_text("some data")
 
         # Act
         result = detect_c_code(mock_repo_path)
 
         # Assert
-        assert result is False
+        assert result == []
 
     def test_detect_c_code_with_cc_extension(self, mock_repo_path: Path) -> None:
         """Test C code detection with .cc extension (Google C++ style).
@@ -264,13 +278,14 @@ class TestCCodeDetection:
         # Arrange
         source_dir = mock_repo_path / "source"
         source_dir.mkdir()
-        (source_dir / "main.cc").write_text('int main() { return 0; }')
+        (source_dir / "main.cc").write_text("int main() { return 0; }")
 
         # Act
         result = detect_c_code(mock_repo_path)
 
         # Assert
-        assert result is True
+        assert len(result) == 1
+        assert result[0] == source_dir.resolve()
 
 
 class TestTyperDependencyDetection:
@@ -387,7 +402,7 @@ class TestTyperCLIModuleDetection:
     ) -> None:
         """Test Typer CLI module detection when CLI module exists.
 
-        Tests: detect_typer_cli_module returns module path for Typer apps
+        Tests: detect_typer_cli_module returns list of module paths for Typer apps
         How: Use mock repo with package containing cli.py with Typer app
         Why: Enables automatic CLI documentation generation
 
@@ -399,12 +414,14 @@ class TestTyperCLIModuleDetection:
         result = detect_typer_cli_module(mock_typer_cli_repo, mock_pyproject_with_typer)
 
         # Assert
-        assert result == "test_cli_project.cli"
+        assert result == ["test_cli_project.cli"]
 
-    def test_detect_typer_cli_module_no_package(self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]) -> None:
+    def test_detect_typer_cli_module_no_package(
+        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+    ) -> None:
         """Test Typer CLI module detection when package directory missing.
 
-        Tests: detect_typer_cli_module returns None without package
+        Tests: detect_typer_cli_module returns empty list without package
         How: Use repo without creating package directory
         Why: Should handle projects without source code gracefully
 
@@ -416,14 +433,14 @@ class TestTyperCLIModuleDetection:
         result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
 
         # Assert
-        assert result is None
+        assert result == []
 
     def test_detect_typer_cli_module_no_typer_import(
         self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
     ) -> None:
         """Test Typer CLI module detection when Python files lack typer import.
 
-        Tests: detect_typer_cli_module returns None without typer imports
+        Tests: detect_typer_cli_module returns empty list without typer imports
         How: Create package with .py files but no typer usage
         Why: Should only detect files with actual Typer usage
 
@@ -435,13 +452,13 @@ class TestTyperCLIModuleDetection:
         package_dir = mock_repo_path / "test_cli_project"
         package_dir.mkdir()
         (package_dir / "__init__.py").write_text('"""Package without CLI."""')
-        (package_dir / "utils.py").write_text('def helper(): pass')
+        (package_dir / "utils.py").write_text("def helper(): pass")
 
         # Act
         result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
 
         # Assert
-        assert result is None
+        assert result == []
 
     def test_detect_typer_cli_module_skips_test_files(
         self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
@@ -470,7 +487,7 @@ app = typer.Typer()
         result = detect_typer_cli_module(mock_repo_path, mock_pyproject_with_typer)
 
         # Assert
-        assert result is None
+        assert result == []
 
 
 class TestPrivateRegistryDetection:

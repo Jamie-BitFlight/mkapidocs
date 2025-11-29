@@ -36,7 +36,7 @@ for md_path in sorted(markdown_files):
     # Create a virtual doc path in the "Repository Files" section
     if rel_path.name == "README.md":
         # For README.md files, use the directory name
-        # Root README.md becomes about.md, others become index.md in their directory
+        # Root README.md becomes about.md, nested ones become index.md in their directory
         doc_path = f"repository/{'/'.join(rel_path.parts[:-1])}/index.md" if len(rel_path.parts) > 1 else "about.md"
     else:
         # For other .md files, keep their name

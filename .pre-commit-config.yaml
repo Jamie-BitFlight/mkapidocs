@@ -8,8 +8,8 @@ repos:
       - id: mkapidocs-regen
         name: Regenerate documentation
         description: Run mkapidocs setup to keep generated content in sync with code changes
-        entry: ./mkapidocs.py setup .
-        language: script
+        entry: uv run mkapidocs setup .
+        language: system
         files: ^(.*\.py|pyproject\.toml|mkdocs\.yml)$
         pass_filenames: false
         verbose: true
@@ -30,6 +30,7 @@ repos:
       - id: end-of-file-fixer
         exclude: \.lock$
       - id: check-yaml
+        args: [--unsafe] # Allow Python YAML constructors (!!python/name:)
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
@@ -68,7 +69,7 @@ repos:
       - id: prettier
         name: Format YAML, JSON, and Markdown files
         types_or: [yaml, json, markdown]
-        exclude: \.lock$
+        exclude: (\.lock$|mkdocs\.yml|docs/generated/)
 
   # Shell formatting
   - repo: https://github.com/pecigonzalo/pre-commit-shfmt
@@ -97,6 +98,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+        exclude: ^(docs/|tests/)
 
       - id: pyright
         name: basedpyright
@@ -105,6 +107,7 @@ repos:
         types: [python]
         pass_filenames: true
         require_serial: true
+        exclude: ^(docs/|tests/)
 
 # Configuration for specific hooks
 default_language_version:

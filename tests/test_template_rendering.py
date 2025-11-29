@@ -18,6 +18,12 @@ import yaml
 
 
 # Access mkapidocs module from sys.modules (loaded by session-scoped fixture in conftest.py)
+def get_ci_provider():  # type: ignore[no-untyped-def]
+    """Get CIProvider enum from mkapidocs module."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].CIProvider
+
+
+# Access mkapidocs module from sys.modules (loaded by session-scoped fixture in conftest.py)
 def create_mkdocs_config(*args, **kwargs):  # type: ignore[no-untyped-def]
     """Wrapper for mkapidocs.create_mkdocs_config with deferred module lookup."""  # noqa: DOC201
     return sys.modules["mkapidocs"].create_mkdocs_config(*args, **kwargs)
@@ -74,8 +80,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name=project_name,
             site_url=site_url,
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -104,8 +111,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="test-project",
             site_url="https://example.com/",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -136,8 +144,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="cli-project",
             site_url="https://example.com/",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=True,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -161,8 +170,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="lib-project",
             site_url="https://example.com/",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -175,7 +185,7 @@ class TestCreateMkdocsConfig:
         """Test mkdocs.yml includes mkdoxy plugin when C/C++ code detected.
 
         Tests: Conditional plugin inclusion for C/C++ projects
-        How: Set has_c_code=True, verify mkdoxy configuration in rendered YAML
+        How: Set c_source_dirs=[mock_repo_path / "source"], verify mkdoxy configuration in rendered YAML
         Why: C/C++ projects need Doxygen integration via mkdoxy
 
         Args:
@@ -186,8 +196,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="c-project",
             site_url="https://example.com/",
-            has_c_code=True,
+            c_source_dirs=[mock_repo_path / "source"],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -195,13 +206,13 @@ class TestCreateMkdocsConfig:
         rendered_content = mkdocs_path.read_text()
 
         assert "mkdoxy" in rendered_content
-        assert "src-dirs: source/" in rendered_content
+        assert "src-dirs: source" in rendered_content
 
     def test_excludes_mkdoxy_plugin_when_no_c_code(self, mock_repo_path: Path) -> None:
         """Test mkdocs.yml excludes mkdoxy plugin when no C/C++ code detected.
 
         Tests: Conditional plugin exclusion for Python-only projects
-        How: Set has_c_code=False, verify mkdoxy not in rendered YAML
+        How: Set c_source_dirs=[], verify mkdoxy not in rendered YAML
         Why: Avoid Doxygen dependency for pure Python projects
 
         Args:
@@ -212,8 +223,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="python-project",
             site_url="https://example.com/",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -226,7 +238,7 @@ class TestCreateMkdocsConfig:
         """Test mkdocs.yml includes all conditional plugins when all features enabled.
 
         Tests: Integration of multiple conditional features
-        How: Set has_typer=True and has_c_code=True, verify all plugins present
+        How: Set has_typer=True and c_source_dirs=[mock_repo_path / "source"], verify all plugins present
         Why: Projects with multiple features need all corresponding plugins
 
         Args:
@@ -237,8 +249,9 @@ class TestCreateMkdocsConfig:
             repo_path=mock_repo_path,
             project_name="full-featured-project",
             site_url="https://example.com/",
-            has_c_code=True,
+            c_source_dirs=[mock_repo_path / "source"],
             has_typer=True,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert
@@ -287,8 +300,9 @@ nav:
             repo_path=mock_repo_path,
             project_name="new-project",
             site_url="https://new-url.com/",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
         )
 
         # Assert - Verify merge behavior
@@ -302,6 +316,58 @@ nav:
 
         # User nav customizations should be preserved
         assert "Custom Page" in content
+
+    def test_github_provider_sets_site_dir_to_site(self, mock_repo_path: Path) -> None:
+        """Test that GitHub provider configures site_dir: site in mkdocs.yml.
+
+        Tests: site_dir configuration based on CI provider
+        How: Create mkdocs.yml with GITHUB provider, verify site_dir value
+        Why: GitHub Pages uses 'site' directory for artifacts
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange & Act
+        create_mkdocs_config(
+            repo_path=mock_repo_path,
+            project_name="github-project",
+            site_url="https://example.github.io/project/",
+            c_source_dirs=[],
+            has_typer=False,
+            ci_provider=get_ci_provider().GITHUB,
+        )
+
+        # Assert
+        mkdocs_path = mock_repo_path / "mkdocs.yml"
+        content = mkdocs_path.read_text()
+        assert "site_dir: site" in content
+        assert "site_dir: public" not in content
+
+    def test_gitlab_provider_sets_site_dir_to_public(self, mock_repo_path: Path) -> None:
+        """Test that GitLab provider configures site_dir: public in mkdocs.yml.
+
+        Tests: site_dir configuration based on CI provider
+        How: Create mkdocs.yml with GITLAB provider, verify site_dir value
+        Why: GitLab Pages requires 'public' directory for artifacts
+
+        Args:
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange & Act
+        create_mkdocs_config(
+            repo_path=mock_repo_path,
+            project_name="gitlab-project",
+            site_url="https://example.gitlab.io/project/",
+            c_source_dirs=[],
+            has_typer=False,
+            ci_provider=get_ci_provider().GITLAB,
+        )
+
+        # Assert
+        mkdocs_path = mock_repo_path / "mkdocs.yml"
+        content = mkdocs_path.read_text()
+        assert "site_dir: public" in content
+        assert "site_dir: site" not in content
 
 
 class TestCreateGitHubActions:
@@ -387,7 +453,7 @@ class TestCreateGitHubActions:
         workflow_path = mock_repo_path / ".github" / "workflows" / "pages.yml"
         workflow_content = workflow_path.read_text()
 
-        assert "./mkapidocs build . --strict" in workflow_content
+        assert "./mkapidocs.py build . --strict" in workflow_content
 
     def test_workflow_overwrites_existing_file(self, mock_repo_path: Path) -> None:
         """Test GitHub Actions workflow overwrites existing file.
@@ -436,7 +502,7 @@ class TestCreateIndexPage:
             repo_path=mock_repo_path,
             project_name="test-project",
             description="Test project description",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
             license_name="MIT",
             has_private_registry=False,
@@ -466,7 +532,7 @@ class TestCreateIndexPage:
             repo_path=mock_repo_path,
             project_name=project_name,
             description=description,
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
             license_name="Apache 2.0",
             has_private_registry=False,
@@ -496,7 +562,7 @@ class TestCreateIndexPage:
             repo_path=mock_repo_path,
             project_name="test-project",
             description="Test description",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
             license_name="MIT",
             has_private_registry=False,
@@ -533,7 +599,7 @@ class TestCreateIndexPage:
             repo_path=mock_repo_path,
             project_name="test-project",
             description="Test description",
-            has_c_code=False,
+            c_source_dirs=[],
             has_typer=False,
             license_name="MIT",
             has_private_registry=False,
@@ -563,9 +629,7 @@ class TestCreateAPIReference:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(
-            repo_path=mock_repo_path, project_name="test-project", has_c_code=False, cli_module=None
-        )
+        create_api_reference(repo_path=mock_repo_path, project_name="test-project", c_source_dirs=[], cli_modules=None)
 
         # Assert
         python_api_path = mock_repo_path / "docs" / "generated" / "python-api.md"
@@ -582,9 +646,7 @@ class TestCreateAPIReference:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(
-            repo_path=mock_repo_path, project_name="my-package", has_c_code=False, cli_module=None
-        )
+        create_api_reference(repo_path=mock_repo_path, project_name="my-package", c_source_dirs=[], cli_modules=None)
 
         # Assert
         python_api_path = mock_repo_path / "docs" / "generated" / "python-api.md"
@@ -597,14 +659,19 @@ class TestCreateAPIReference:
         """Test C API reference page created when C code detected.
 
         Tests: Conditional C API page creation
-        How: Set has_c_code=True, verify c-api.md exists
+        How: Set c_source_dirs=[mock_repo_path / "source"], verify c-api.md exists
         Why: C/C++ projects need separate API documentation
 
         Args:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(repo_path=mock_repo_path, project_name="c-project", has_c_code=True, cli_module=None)
+        create_api_reference(
+            repo_path=mock_repo_path,
+            project_name="c-project",
+            c_source_dirs=[mock_repo_path / "source"],
+            cli_modules=None,
+        )
 
         # Assert
         c_api_path = mock_repo_path / "docs" / "generated" / "c-api.md"
@@ -614,7 +681,7 @@ class TestCreateAPIReference:
         """Test C API reference page not created when no C code.
 
         Tests: Conditional C API page exclusion
-        How: Set has_c_code=False, verify c-api.md does not exist
+        How: Set c_source_dirs=[], verify c-api.md does not exist
         Why: Pure Python projects don't need C API documentation
 
         Args:
@@ -622,7 +689,7 @@ class TestCreateAPIReference:
         """
         # Arrange & Act
         create_api_reference(
-            repo_path=mock_repo_path, project_name="python-project", has_c_code=False, cli_module=None
+            repo_path=mock_repo_path, project_name="python-project", c_source_dirs=[], cli_modules=None
         )
 
         # Assert
@@ -633,7 +700,7 @@ class TestCreateAPIReference:
         """Test CLI reference page created when CLI module detected.
 
         Tests: Conditional CLI page creation
-        How: Provide cli_module parameter, verify cli-api.md exists
+        How: Provide cli_modules parameter, verify cli-api.md exists
         Why: Typer CLI projects need CLI documentation
 
         Args:
@@ -641,7 +708,7 @@ class TestCreateAPIReference:
         """
         # Arrange & Act
         create_api_reference(
-            repo_path=mock_repo_path, project_name="cli-project", has_c_code=False, cli_module="cli_project.cli"
+            repo_path=mock_repo_path, project_name="cli-project", c_source_dirs=[], cli_modules=["cli_project.cli"]
         )
 
         # Assert
@@ -662,8 +729,8 @@ class TestCreateAPIReference:
         create_api_reference(
             repo_path=mock_repo_path,
             project_name="my-cli-project",
-            has_c_code=False,
-            cli_module="my_cli_project.cli",
+            c_source_dirs=[],
+            cli_modules=["my_cli_project.cli"],
         )
 
         # Assert
@@ -677,16 +744,14 @@ class TestCreateAPIReference:
         """Test CLI reference page not created when no CLI module.
 
         Tests: Conditional CLI page exclusion
-        How: Set cli_module=None, verify cli-api.md does not exist
+        How: Set cli_modules=None, verify cli-api.md does not exist
         Why: Non-CLI projects don't need CLI documentation
 
         Args:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(
-            repo_path=mock_repo_path, project_name="lib-project", has_c_code=False, cli_module=None
-        )
+        create_api_reference(repo_path=mock_repo_path, project_name="lib-project", c_source_dirs=[], cli_modules=None)
 
         # Assert
         cli_api_path = mock_repo_path / "docs" / "generated" / "cli-api.md"
@@ -778,8 +843,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="test-project",
-            has_c_code=False,
-            has_typer=False,
+            c_source_dirs=[],
+            cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -802,8 +867,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="test-project",
-            has_c_code=False,
-            has_typer=False,
+            c_source_dirs=[],
+            cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -819,7 +884,7 @@ class TestCreateGeneratedContent:
         """Test features snippet includes CLI reference when Typer detected.
 
         Tests: Conditional CLI reference link in features list
-        How: Set has_typer=True, verify CLI reference link present
+        How: Set cli_modules with module path, verify CLI reference link present
         Why: Typer projects should promote CLI documentation
 
         Args:
@@ -829,8 +894,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="cli-project",
-            has_c_code=False,
-            has_typer=True,
+            c_source_dirs=[],
+            cli_modules=["cli_project.cli"],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -846,7 +911,7 @@ class TestCreateGeneratedContent:
         """Test features snippet includes C API reference when C code detected.
 
         Tests: Conditional C API reference link in features list
-        How: Set has_c_code=True, verify C API reference link present
+        How: Set c_source_dirs=[mock_repo_path / "source"], verify C API reference link present
         Why: C/C++ projects should promote C API documentation
 
         Args:
@@ -856,8 +921,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="c-project",
-            has_c_code=True,
-            has_typer=False,
+            c_source_dirs=[mock_repo_path / "source"],
+            cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -883,8 +948,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="test-project",
-            has_c_code=False,
-            has_typer=False,
+            c_source_dirs=[],
+            cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -907,8 +972,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="private-project",
-            has_c_code=False,
-            has_typer=False,
+            c_source_dirs=[],
+            cli_modules=[],
             has_private_registry=True,
             private_registry_url="https://private.pypi.org/simple",
         )
@@ -934,8 +999,8 @@ class TestCreateGeneratedContent:
         create_generated_content(
             repo_path=mock_repo_path,
             project_name="public-project",
-            has_c_code=False,
-            has_typer=False,
+            c_source_dirs=[],
+            cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
         )
@@ -945,3 +1010,142 @@ class TestCreateGeneratedContent:
         content = registry_path.read_text()
 
         assert content.strip() == ""
+
+
+def update_gitignore(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """Wrapper for mkapidocs.update_gitignore with deferred module lookup."""  # noqa: DOC201
+    return sys.modules["mkapidocs"].update_gitignore(*args, **kwargs)
+
+
+class TestUpdateGitignore:
+    """Tests for .gitignore update functionality."""
+
+    def test_update_gitignore_github_creates_new_file(self, tmp_path: Path) -> None:
+        """Test creating new .gitignore with GitHub provider."""
+        # Arrange
+        CIProvider = get_ci_provider()
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITHUB)
+
+        # Assert
+        gitignore_path = tmp_path / ".gitignore"
+        assert gitignore_path.exists()
+        content = gitignore_path.read_text()
+        assert "/site/" in content
+        assert ".mkdocs_cache/" in content
+        assert "/public/" not in content
+
+    def test_update_gitignore_gitlab_creates_new_file(self, tmp_path: Path) -> None:
+        """Test creating new .gitignore with GitLab provider."""
+        # Arrange
+        CIProvider = get_ci_provider()
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITLAB)
+
+        # Assert
+        gitignore_path = tmp_path / ".gitignore"
+        assert gitignore_path.exists()
+        content = gitignore_path.read_text()
+        assert "/public/" in content
+        assert ".mkdocs_cache/" in content
+        assert "/site/" not in content
+
+    def test_update_gitignore_github_appends_to_existing(self, tmp_path: Path) -> None:
+        """Test appending to existing .gitignore with GitHub provider."""
+        # Arrange
+        CIProvider = get_ci_provider()
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text("# Existing content\n*.pyc\n__pycache__/\n")
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITHUB)
+
+        # Assert
+        content = gitignore_path.read_text()
+        assert "# Existing content" in content
+        assert "*.pyc" in content
+        assert "/site/" in content
+        assert ".mkdocs_cache/" in content
+        assert "/public/" not in content
+
+    def test_update_gitignore_gitlab_appends_to_existing(self, tmp_path: Path) -> None:
+        """Test appending to existing .gitignore with GitLab provider."""
+        # Arrange
+        CIProvider = get_ci_provider()
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text("# Existing content\n*.pyc\n__pycache__/\n")
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITLAB)
+
+        # Assert
+        content = gitignore_path.read_text()
+        assert "# Existing content" in content
+        assert "*.pyc" in content
+        assert "/public/" in content
+        assert ".mkdocs_cache/" in content
+        assert "/site/" not in content
+
+    def test_update_gitignore_github_skips_duplicate_entries(self, tmp_path: Path) -> None:
+        """Test that GitHub entries are not duplicated if already present."""
+        # Arrange
+        CIProvider = get_ci_provider()
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text("# MkDocs documentation\n/site/\n.mkdocs_cache/\n")
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITHUB)
+
+        # Assert
+        content = gitignore_path.read_text()
+        # Count occurrences - should only appear once each
+        assert content.count("/site/") == 1
+        assert content.count(".mkdocs_cache/") == 1
+
+    def test_update_gitignore_gitlab_skips_duplicate_entries(self, tmp_path: Path) -> None:
+        """Test that GitLab entries are not duplicated if already present."""
+        # Arrange
+        CIProvider = get_ci_provider()
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text("# MkDocs documentation\n/public/\n.mkdocs_cache/\n")
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITLAB)
+
+        # Assert
+        content = gitignore_path.read_text()
+        # Count occurrences - should only appear once each
+        assert content.count("/public/") == 1
+        assert content.count(".mkdocs_cache/") == 1
+
+    def test_update_gitignore_includes_generated_when_requested(self, tmp_path: Path) -> None:
+        """Test that docs/generated/ is added when include_generated=True."""
+        # Arrange
+        CIProvider = get_ci_provider()
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITHUB, include_generated=True)
+
+        # Assert
+        gitignore_path = tmp_path / ".gitignore"
+        content = gitignore_path.read_text()
+        assert "/site/" in content
+        assert ".mkdocs_cache/" in content
+        assert "docs/generated/" in content
+
+    def test_update_gitignore_excludes_generated_by_default(self, tmp_path: Path) -> None:
+        """Test that docs/generated/ is not added by default."""
+        # Arrange
+        CIProvider = get_ci_provider()
+
+        # Act
+        update_gitignore(tmp_path, CIProvider.GITLAB)
+
+        # Assert
+        gitignore_path = tmp_path / ".gitignore"
+        content = gitignore_path.read_text()
+        assert "/public/" in content
+        assert ".mkdocs_cache/" in content
+        assert "docs/generated/" not in content

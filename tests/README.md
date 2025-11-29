@@ -52,9 +52,9 @@ All script dependencies are installed in the dev dependency group to enable dire
 
 ### Current Coverage: 31% (39 tests passing)
 
-| Module | Statements | Covered | Coverage |
-|--------|-----------|---------|----------|
-| mkapidocs | 800 | 246 | 31% |
+| Module    | Statements | Covered | Coverage |
+| --------- | ---------- | ------- | -------- |
+| mkapidocs | 800        | 246     | 31%      |
 
 ### Coverage by Functional Area
 
@@ -143,6 +143,7 @@ All tests pass mypy strict type checking with Python 3.11+ modern type hints (`s
 The `test_cli_commands.py` file has 15 tests that pass individually but fail when run as part of the full test suite. This is due to module import state conflicts when pytest loads the mkapidocs module multiple times across different test files.
 
 **Symptoms:**
+
 - Tests pass: `pytest tests/test_cli_commands.py::TestVersionCommand::test_version_command_success`
 - Tests fail: `pytest tests/test_cli_commands.py tests/test_feature_detection.py`
 
@@ -150,9 +151,10 @@ The `test_cli_commands.py` file has 15 tests that pass individually but fail whe
 pytest's module caching interacts poorly with our importlib-based import strategy. When `test_feature_detection.py` imports mkapidocs, then `test_cli_commands.py` imports it again, the module state is polluted.
 
 **Potential Solutions:**
+
 1. Create shared import fixture in conftest.py
 2. Use subprocess testing for CLI commands instead of direct import
-3. Refactor mkapidocs into an importable package with proper __main__.py
+3. Refactor mkapidocs into an importable package with proper **main**.py
 
 ## Roadmap to 80% Coverage
 

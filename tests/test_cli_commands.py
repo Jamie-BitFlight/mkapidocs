@@ -43,6 +43,7 @@ def typer_app():
         Typer app instance for CLI testing
     """
     import sys
+
     return sys.modules["mkapidocs"].app
 
 
@@ -148,12 +149,7 @@ class TestSetupCommand:
         assert result.exit_code == 1
 
     def test_setup_command_with_custom_github_url(
-        self,
-        cli_runner: CliRunner,
-        mock_repo_path: Path,
-        mock_pyproject_toml: Path,
-        mocker: MockerFixture,
-        typer_app,
+        self, cli_runner: CliRunner, mock_repo_path: Path, mock_pyproject_toml: Path, mocker: MockerFixture, typer_app
     ) -> None:
         """Test setup command accepts custom GitHub URL.
 
@@ -180,7 +176,7 @@ class TestSetupCommand:
         assert result.exit_code == 0
         mock_setup.assert_called_once()
         args = mock_setup.call_args[0]
-        assert args[1] == custom_url  # Second argument is github_url_base
+        assert args[2] == custom_url  # Third argument is github_url_base (after repo_path and provider)
 
 
 class TestBuildCommand:
