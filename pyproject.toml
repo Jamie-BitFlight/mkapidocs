@@ -27,7 +27,6 @@ dependencies = [
     "mkdoxy>=1.2.3",
     "mkdocs-mermaid2-plugin>=1.1.1",
     "termynal>=0.12.1",
-    "mkdocs-recently-updated-docs>=0.1.4",
 ]
 
 [project.license]
@@ -46,6 +45,7 @@ packages = ["packages/mkapidocs"]
 target-version = "py311"
 line-length = 120
 fix = true
+unsafe-fixes = true
 preview = true
 
 [tool.ruff.format]
@@ -73,7 +73,6 @@ extend-select = [
     "PGH",
     "RUF",
     "TRY",
-    "DOC",
     "D",
 ]
 ignore = [
@@ -94,6 +93,7 @@ ignore = [
     "Q003",
     "TRY003",
     "DOC501",
+    "DOC502",
     "T201",
 ]
 unfixable = ["F401", "DOC501"]
@@ -147,6 +147,11 @@ mypy_path = []
 [tool.basedpyright]
 pythonVersion = "3.11"
 reportMissingTypeStubs = false
+reportUnusedCallResult = false
+reportUnusedParameter = false
+reportAny = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
 
 [tool.pytest.ini_options]
 addopts = ["--cov=packages/mkapidocs", "--cov-report=term-missing", "-v"]
