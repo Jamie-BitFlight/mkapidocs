@@ -10,32 +10,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-mkapidocs is a PEP 723 standalone script that automates MkDocs documentation setup for Python projects. It's designed to be self-contained with no installation required - dependencies are declared inline using PEP 723 script metadata and managed by uv.
+mkapidocs is an installable Python package that automates MkDocs documentation setup for Python projects. It supports both GitHub Pages and GitLab Pages deployment, with intelligent feature detection for C/C++ code and Typer CLI applications.
 
 ## Architecture
 
-### PEP 723 Standalone Script Model
+### Package Structure
 
-The main executable is `mkapidocs.py` - a single Python script with inline dependency declarations. This architecture means:
+The project follows standard Python package layout with hatchling build system:
 
-- **No package structure**: There's no `src/` or traditional Python package layout
-- **No setup.py/setup.cfg**: All metadata is in `pyproject.toml` for linting/testing only
-- **uv execution**: Script runs via `#!/usr/bin/env -S uv --quiet run --active --script` shebang
-- **Self-contained dependencies**: All dependencies declared in `# /// script` block at top of file
+```
+mkapidocs/
+├── packages/
+│   └── mkapidocs/           # Main package
+│       ├── __init__.py      # Package init with version
+│       ├── cli.py           # Typer CLI application (main module)
+│       └── ...
+├── tests/                   # Test suite
+├── pyproject.toml           # Package configuration
+└── README.md
+```
 
 ### Key Components
 
-The script is organized into distinct functional sections (mkapidocs.py:1-2396):
+The CLI module (`packages/mkapidocs/cli.py`) is organized into distinct functional sections:
 
-1. **Template System** (lines 62-430): Inline Jinja2 templates for all generated files (mkdocs.yml, GitHub Actions, markdown docs, gen_ref_pages.py)
-2. **Exception Classes** (lines 453-458): CLIError and BuildError for error handling
-3. **Message Types** (lines 461-467): MessageType enum for display formatting
-4. **Validation System** (lines 475-1090): Environment and project validation with DoxygenInstaller and SystemValidator classes
-5. **Feature Detection** (lines 1093-1350): Git URL parsing, C/C++ code detection, Typer CLI detection, private registry detection
-6. **YAML Merge System** (lines 1352-1550): Smart merging of mkdocs.yml preserving user customizations
-7. **Content Generation** (lines 1552-1900): Functions that render templates and create documentation structure
-8. **Build/Serve Commands** (lines 1970-2150): MkDocs integration for building and serving docs
-9. **Typer CLI Commands** (lines 2152-2396): version, info, setup, build, serve commands
+1. **Template System**: Inline Jinja2 templates for all generated files (mkdocs.yml, CI workflows, markdown docs, gen_ref_pages.py)
+2. **Exception Classes**: CLIError and BuildError for error handling
+3. **Message Types**: MessageType enum for display formatting
+4. **Validation System**: Environment and project validation with DoxygenInstaller and SystemValidator classes
+5. **Feature Detection**: Git URL parsing, C/C++ code detection, Typer CLI detection, private registry detection, provider auto-detection
+6. **YAML Merge System**: Smart merging of mkdocs.yml preserving user customizations
+7. **Content Generation**: Functions that render templates and create documentation structure
+8. **Build/Serve Commands**: MkDocs integration with target project environment detection
+9. **Typer CLI Commands**: version, info, setup, build, serve commands
 
 ### Template Rendering Flow
 
@@ -44,15 +51,26 @@ The script is organized into distinct functional sections (mkapidocs.py:1-2396):
 3. Render Jinja2 templates with detected features
 4. Write generated files to target project directory
 
+### Target Project Environment Integration
+
+For CLI documentation to render correctly, mkapidocs detects when it's installed as a dev dependency in the target project and runs `mkdocs build` directly within that environment. This allows mkdocs-typer2 to import the target project's CLI module with all dependencies available.
+
+The flow is:
+
+1. External call: `mkapidocs build /path/to/project`
+2. Detects mkapidocs in target's dev deps → calls `uv run mkapidocs build .` with `MKAPIDOCS_INTERNAL_CALL=1`
+3. Internal call: Detects `MKAPIDOCS_INTERNAL_CALL=1` → calls `mkdocs build` directly
+4. mkdocs-typer2 imports CLI module successfully → full documentation generated
+
 ## CLI Commands
 
-All commands follow the pattern: `./mkapidocs.py <command> [args]`
+All commands follow the pattern: `mkapidocs <command> [args]` or `uv run mkapidocs <command> [args]`
 
 - `version` - Show version information
 - `info` - Display package metadata and installation details
 - `setup <path> [--provider {github|gitlab}]` - Set up MkDocs documentation for a Python project
-- `build <path>` - Build documentation to static site
-- `serve <path>` - Serve documentation with live preview
+- `build <path> [--strict] [--output-dir PATH]` - Build documentation to static site
+- `serve <path> [--host HOST] [--port PORT]` - Serve documentation with live preview
 
 ### setup Command
 
@@ -67,24 +85,23 @@ The `setup` command configures MkDocs documentation and CI/CD workflows for your
 **Options:**
 
 - `--provider {github|gitlab}` - Explicitly specify CI/CD provider (bypasses auto-detection)
-- `--github-url-base <url>` - Override GitHub Pages URL (for backward compatibility)
 
 **Examples:**
 
 ```bash
 # Auto-detect provider from git remote or filesystem
-./mkapidocs.py setup /path/to/project
+mkapidocs setup /path/to/project
 
 # Explicitly use GitHub Actions
-./mkapidocs.py setup /path/to/project --provider github
+mkapidocs setup /path/to/project --provider github
 
 # Explicitly use GitLab CI
-./mkapidocs.py setup /path/to/project --provider gitlab
+mkapidocs setup /path/to/project --provider gitlab
 
 # Other commands
-./mkapidocs.py version
-./mkapidocs.py build . --strict
-./mkapidocs.py serve .
+mkapidocs version
+mkapidocs build . --strict
+mkapidocs serve .
 ```
 
 ## Development Commands
@@ -97,70 +114,70 @@ Ensure mkdocs skill is enabled at task start (this repo uses MkDocs for its own 
 
 ```bash
 # Run ruff linter
-uv run ruff check mkapidocs.py
+uv run ruff check packages/mkapidocs/
 
 # Run ruff formatter
-uv run ruff format mkapidocs.py
+uv run ruff format packages/mkapidocs/
 
 # Run mypy type checker
-uv run mypy mkapidocs.py
+uv run mypy packages/mkapidocs/
 
 # Run basedpyright type checker
-uv run basedpyright mkapidocs.py
+uv run basedpyright packages/mkapidocs/
 ```
 
 ### Testing
 
-No test suite exists yet. When adding tests, they should go in `tests/` directory.
+```bash
+# Run tests with coverage
+uv run pytest
 
-### Running the Script
+# Run specific test file
+uv run pytest tests/test_cli_commands.py -v
+```
+
+### Running the Package
 
 ```bash
-# Direct execution (uses shebang)
-./mkapidocs.py --help
-
-# Via uv (alternative)
-uv run mkapidocs.py --help
+# Via uv run
+uv run mkapidocs --help
 
 # Test on example project
-./mkapidocs.py setup /path/to/test/project
+uv run mkapidocs setup /path/to/test/project
 ```
 
 ### Building This Project's Documentation
 
 ```bash
 # Serve docs locally
-./mkapidocs.py serve .
+uv run mkapidocs serve .
 
 # Build static site
-./mkapidocs.py build .
+uv run mkapidocs build .
 ```
 
 ### Pre-commit Hooks
 
 The project uses pre-commit for automated quality checks. The configuration includes:
 
-- **mkapidocs-regen**: Runs `./mkapidocs.py setup .` to regenerate documentation when Python files, pyproject.toml, or mkdocs.yml change
+- **mkapidocs-regen**: Runs `mkapidocs setup .` to regenerate documentation when Python files, pyproject.toml, or mkdocs.yml change
 - **Standard hooks**: trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml
 - **Ruff**: Python linting and formatting
-- **Mypy/Basedpyright**: Type checking with PEP 723 dependency installation
+- **Mypy/Basedpyright**: Type checking
 - **Shellcheck**: Shell script linting
 - **Prettier**: YAML/JSON/Markdown formatting
-- **shfmt**: Shell script formatting
-
-Note: The `install-pep723-deps` hook extracts dependencies from PEP 723 script blocks and installs them before type checking.
 
 ## Important Implementation Details
 
-### Git URL Detection (lines 1093-1173)
+### Git URL Detection
 
-The script extracts GitHub Pages URLs from git remotes. It handles:
+The package extracts Pages URLs from git remotes. It handles:
 
-- SSH format: `git@github.com:user/repo.git`
-- HTTPS format: `https://github.com/user/repo.git`
-- Converts to GitHub Pages URL format: `https://user.github.io/repo/`
+- SSH format: `git@github.com:user/repo.git` or `git@gitlab.com:user/repo.git`
+- HTTPS format: `https://github.com/user/repo.git` or `https://gitlab.com/user/repo.git`
+- Converts to Pages URL format: `https://user.github.io/repo/` or `https://user.gitlab.io/repo/`
 
-### Source Path Detection (lines 1760-1814)
+### Source Path Detection
 
 The `get_source_paths_from_pyproject()` function extracts package locations from pyproject.toml to set PYTHONPATH for mkdocstrings. It checks:
 
@@ -168,18 +185,18 @@ The `get_source_paths_from_pyproject()` function extracts package locations from
 - `[tool.setuptools.packages.find]` with `where` key
 - Falls back to `src/` if no explicit configuration
 
-### Doxygen Installer (lines 492-658)
+### Doxygen Installer
 
-For C/C++ documentation, the script can download and install Doxygen if not present:
+For C/C++ documentation, the package can download and install Doxygen if not present:
 
 - Downloads from official GitHub releases
 - Verifies SHA256 checksum
 - Extracts to `~/.local/bin/`
 - Platform-specific (Linux x86_64 only currently)
 
-### CLI Module Detection (lines 1237-1329)
+### CLI Module Detection
 
-For Typer CLI apps, the script attempts to find the CLI entry point by:
+For Typer CLI apps, the package attempts to find the CLI entry point by:
 
 1. Checking `[project.scripts]` for entry points
 2. Parsing entry point format `module:app_object`
@@ -225,20 +242,30 @@ When `setup` is run on a project that already has mkdocs.yml:
 
 This allows users to customize their docs and safely re-run setup to pick up new features or template improvements.
 
-## GitHub Actions Integration
+## CI/CD Integration
+
+### GitHub Actions
 
 Generated `.github/workflows/pages.yml` uses:
 
 - `actions/checkout@v4` for code checkout
 - `actions/setup-python@v5` for Python 3.11 setup
 - `astral-sh/setup-uv@v4` for uv installation
-- Runs `./mkapidocs.py build . --strict` to build documentation
+- Runs `mkapidocs build . --strict` to build documentation
 - `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4` for GitHub Pages deployment
 - Deploys to GitHub Pages on pushes to main branch only
 
+### GitLab CI
+
+Generated `pages` job in `.gitlab-ci.yml` uses:
+
+- Python environment with uv
+- Runs `mkapidocs build . --strict`
+- Deploys public/ directory to GitLab Pages
+
 ## Validation System
 
-Before setup, the script validates:
+Before setup, the package validates:
 
 1. **System requirements**: Python version, uv installation, mkdocs availability
 2. **Project requirements**: pyproject.toml exists, has required metadata
@@ -259,12 +286,12 @@ All content generation functions follow this pattern:
 
 1. Check if target file/directory exists
 2. Render Jinja2 template with context variables
-3. Write to target project (not this script's directory)
+3. Write to target project (not this package's directory)
 4. Display success message with rich formatting
 
 ## Working with Templates
 
-Templates are inline string constants (lines 62-430). To modify:
+Templates are inline string constants in `cli.py`. To modify:
 
 1. Find template constant (e.g., `MKDOCS_YML_TEMPLATE`)
 2. Edit Jinja2 syntax directly in the constant
@@ -343,13 +370,9 @@ refactor!: simplify error handling
 BREAKING CHANGE: error responses now use standardized format
 ```
 
-## PEP 723 Development Pattern
+## Dependencies
 
-The script uses PEP 723 inline script metadata, which affects the development workflow:
-
-### Dependencies
-
-All runtime dependencies are declared in the `# /// script` block at the top of the mkapidocs.py file (lines 2-15). These include:
+Runtime dependencies are declared in `[project] dependencies` in pyproject.toml:
 
 - typer: CLI framework
 - jinja2: Template rendering
@@ -359,24 +382,6 @@ All runtime dependencies are declared in the `# /// script` block at the top of 
 - rich: Terminal formatting
 - httpx: HTTP client for Doxygen downloads
 - pyyaml: YAML parsing/writing
+- mkdocs + plugins: Documentation generation
 
-Development dependencies (linting, testing) are in pyproject.toml's `[dependency-groups]`.
-
-### Type Checking Workflow
-
-Type checkers (mypy, basedpyright) need access to PEP 723 dependencies:
-
-1. Pre-commit hook `install-pep723-deps` extracts dependencies from script block
-2. Runs `uv export --script mkapidocs.py | uv pip install -r -` to install them
-3. Then mypy/basedpyright can resolve imports during type checking
-
-### Running Type Checkers Manually
-
-```bash
-# Ensure PEP 723 deps are installed first
-uv export --script mkapidocs.py | uv pip install -r -
-
-# Then run type checkers
-uv run mypy mkapidocs.py
-uv run basedpyright mkapidocs.py
-```
+Development dependencies are in `[dependency-groups] dev`.

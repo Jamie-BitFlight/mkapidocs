@@ -5,71 +5,57 @@ This guide provides detailed installation instructions for mkapidocs.
 ## Prerequisites
 
 - Python >=3.11,<3.13
-- uv package manager
-- Git (for development installation)
-
+- [uv](https://docs.astral.sh/uv/) package manager
+- Git (for URL auto-detection and CI provider detection)
 
 ## Quick Install
 
-
-To add mkapidocs as a dependency to your project:
+Add mkapidocs as a dev dependency to your project:
 
 ```bash
-uv add mkapidocs
+uv add --dev mkapidocs
 ```
 
+Then run commands via `uv run`:
+
+```bash
+uv run mkapidocs setup .
+uv run mkapidocs build .
+uv run mkapidocs serve .
+```
+
+## Install from Git
+
+For the latest unreleased version, install directly from the repository:
+
+```bash
+uv add --dev "mkapidocs @ git+https://github.com/Jamie-BitFlight/mkapidocs.git"
+```
+
+## Use with uvx (Standalone)
+
+For quick usage without adding to your project:
+
+```bash
+uvx mkapidocs --help
+uvx mkapidocs setup /path/to/project
+```
+
+Or for the latest unreleased version:
+
+```bash
+uvx --from "git+https://github.com/Jamie-BitFlight/mkapidocs.git" mkapidocs setup /path/to/project
+```
 
 ## Development Installation
 
 For development work, clone the repository and install with all dependencies:
 
 ```bash
-# Clone the repository
 git clone https://github.com/Jamie-BitFlight/mkapidocs
 cd mkapidocs
-
-# Install with all dependencies
-uv sync --all-extras
-
-# Or install specific extras
-uv sync --extra dev
+uv sync
 ```
-
-
-## Verification
-
-Verify the installation:
-
-```bash
-# Check installed version
-python -c "from importlib.metadata import version; print(version('mkapidocs'))"
-
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Import Error**
-
-If you get an import error, ensure the package is installed in your active Python environment:
-
-```bash
-python -c "import mkapidocs"
-```
-
-**Permission Error**
-
-uv automatically manages virtual environments, so permission errors should not occur. If you encounter permission issues, ensure uv is properly installed:
-
-```bash
-# Verify uv installation
-uv --version
-
-# Add the package to your project
-uv add mkapidocs
-```
-
 
 ## Uninstallation
 
@@ -78,7 +64,3 @@ To remove mkapidocs from your project:
 ```bash
 uv remove mkapidocs
 ```
-
-## Next Steps
-
-- [API Reference](generated/python-api.md) - Explore the API documentation

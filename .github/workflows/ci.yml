@@ -125,7 +125,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Build documentation
-        run: ./mkapidocs.py build . --strict
+        run: uv run mkapidocs build . --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

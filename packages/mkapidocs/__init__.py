@@ -6,9 +6,6 @@ feature detection for Python projects.
 
 from __future__ import annotations
 
-__version__ = "0.1.1"
+from .version import __version__
 
-# Export main CLI app for entry point
-from mkapidocs.cli import app
-
-__all__ = ["__version__", "app"]
+__all__ = ["__version__"]

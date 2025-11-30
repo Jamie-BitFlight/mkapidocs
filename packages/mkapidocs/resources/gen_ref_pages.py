@@ -25,8 +25,8 @@ for md_path in root.rglob("*.md"):
     markdown_files.append(md_path)
 
 # Build navigation structure
-nav_structure = {}
-doc_paths = []
+nav_structure: dict[str, list[str] | str] = defaultdict(list)
+hs = []
 
 # Create virtual docs for each discovered markdown file
 for md_path in sorted(markdown_files):
@@ -60,15 +60,15 @@ with mkdocs_gen_files.open("repository/SUMMARY.md", "w") as nav_file:
 
     # Group by directory
     current_dir = None
-    for rel_path, doc_path in sorted(doc_paths):
+    for rel_path, _doc_path in sorted(doc_paths):
         parent_dir = str(rel_path.parent) if rel_path.parent != Path(".") else "Root"
 
-        # Write directory header
-        if current_dir != parent_dir:
-            current_dir = parent_dir
-            nav_file.write(f"\n## {parent_dir}\n\n")
+    # Write directory header
+    if current_dir != parent_dir:
+        current_dir = parent_dir
+        nav_file.write(f"\n## {parent_dir}\n\n")
 
-        # Write file link
-        # Remove 'repository/' prefix from doc_path for the link
-        link_path = doc_path.replace("repository/", "")
-        nav_file.write(f"- [{rel_path.name}]({link_path})\n")
+    # Write file link
+    # Remove 'repository/' prefix from doc_path for the link
+    link_path = doc_path.replace("repository/", "")
+    nav_file.write(f"- [{rel_path.name}]({link_path})\n")

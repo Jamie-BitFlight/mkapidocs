@@ -98,7 +98,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
-        exclude: ^(docs/|tests/)
+        exclude: ^(docs/)
 
       - id: pyright
         name: basedpyright
@@ -107,7 +107,7 @@ repos:
         types: [python]
         pass_filenames: true
         require_serial: true
-        exclude: ^(docs/|tests/)
+        exclude: ^(docs/)
 
 # Configuration for specific hooks
 default_language_version:

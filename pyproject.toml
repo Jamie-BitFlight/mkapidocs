@@ -1,19 +1,14 @@
 [build-system]
-requires = [
-    "hatchling",
-    "hatch-vcs",
-]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "mkapidocs"
 version = "0.1.1"
-description = "Automated documentation setup tool for Python projects using MkDocs and GitHub Pages. A PEP 723 standalone script that intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, GitHub Actions workflow, and docstring linting configuration."
+description = "Automated documentation setup tool for Python projects using MkDocs with GitHub Pages or GitLab Pages. Intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, CI/CD workflows, and docstring linting configuration."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
-authors = [
-    { name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" },
-]
+authors = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
 dependencies = [
     "typer>=0.19.2",
     "jinja2>=3.1.6",
@@ -45,9 +40,7 @@ mkapidocs = "mkapidocs.cli:app"
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = [
-    "packages/mkapidocs",
-]
+packages = ["packages/mkapidocs"]
 
 [tool.ruff]
 target-version = "py311"
@@ -103,14 +96,8 @@ ignore = [
     "DOC501",
     "T201",
 ]
-unfixable = [
-    "F401",
-    "DOC501",
-]
-select = [
-    "DOC",
-    "D",
-]
+unfixable = ["F401", "DOC501"]
+select = ["DOC", "D"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 120
@@ -131,51 +118,26 @@ convention = "google"
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/*" = [
-    "S101",
-    "S603",
-    "S607",
-    "D102",
-    "D200",
-    "D100",
-]
-"**/test_*.py" = [
-    "S101",
-    "S603",
-    "S607",
-    "D102",
-    "D200",
-    "D100",
-]
+"**/tests/*" = ["S101", "S603", "S607", "D102", "D200", "D100"]
+"**/test_*.py" = ["S101", "S603", "S607", "D102", "D200", "D100"]
 # CLI tool has legitimate subprocess usage and acceptable complexity
 "packages/mkapidocs/cli.py" = [
     "S404",   # subprocess module import is needed for system integration
     "S603",   # subprocess calls are to known executables (git, uv, mkdocs)
-    "S607",   # partial executable paths are intentional for PATH-based lookup
     "S701",   # Jinja2 autoescape not needed for YAML/Markdown generation
     "S202",   # tarfile.extractall is used with trusted Doxygen releases
-    "C901",   # complexity is acceptable for CLI orchestration functions
-    "TRY300", # return in try block is cleaner for validation functions
-    "TRY301", # raise typer.Exit in except is idiomatic for Typer CLIs
     "DOC502", # docstring raise clauses may reference potential raises from callees
     "SIM102", # nested ifs improve readability for complex conditions with comments
     "SIM117", # nested withs clarify resource lifecycle in httpx streaming
 ]
 # Generated documentation script - minimal typing, not production code
-"docs/gen_ref_pages.py" = [
-    "D100",   # module docstring present
-]
 "docs/generated/gen_ref_pages.py" = [
-    "D100",   # module docstring present
+    "D100", # module docstring present
 ]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
-extra_checks = true
-warn_unused_configs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
 ignore_missing_imports = true
 show_error_codes = true
 pretty = true
@@ -185,57 +147,23 @@ mypy_path = []
 [tool.basedpyright]
 pythonVersion = "3.11"
 reportMissingTypeStubs = false
-venvPath = "."
-venv = ".venv"
-# Suppress warnings that are too strict for CLI tool codebase
-reportAny = false
-reportUnknownVariableType = false
-reportUnknownMemberType = false
-reportUnknownArgumentType = false
-reportUnusedCallResult = false
-reportUnannotatedClassAttribute = false
-reportExplicitAny = false
-reportImplicitStringConcatenation = false
-reportUnnecessaryIsInstance = false
-reportUnreachable = false
-reportImplicitOverride = false
-reportUnusedParameter = false
-reportCallInDefaultInitializer = false
 
 [tool.pytest.ini_options]
-addopts = [
-    "--cov=packages/mkapidocs",
-    "--cov-report=term-missing",
-    "-v",
-]
-testpaths = [
-    "tests",
-]
-python_files = [
-    "test_*.py",
-]
-python_classes = [
-    "Test*",
-]
-python_functions = [
-    "test_*",
-]
+addopts = ["--cov=packages/mkapidocs", "--cov-report=term-missing", "-v"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.coverage.run]
-omit = [
-    "tests/*",
-    ".venv/*",
-    "run-pytest.py",
-]
+omit = ["tests/*", ".venv/*", "run-pytest.py"]
 
 [tool.coverage.report]
 show_missing = true
 fail_under = 70
 
 [tool.semantic_release]
-version_toml = [
-    "pyproject.toml:project.version",
-]
+version_toml = ["pyproject.toml:project.version"]
 branch = "main"
 upload_to_vcs_release = true
 major_on_zero = false
@@ -255,13 +183,8 @@ allowed_tags = [
     "chore",
     "revert",
 ]
-minor_tags = [
-    "feat",
-]
-patch_tags = [
-    "fix",
-    "perf",
-]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
 
 [tool.semantic_release.changelog]
 template_dir = "templates"
