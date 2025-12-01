@@ -6,6 +6,7 @@ import ast
 import os
 import re
 import subprocess
+from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
 from shutil import which
@@ -14,8 +15,7 @@ from typing import cast
 import tomlkit
 from jinja2 import Environment
 from rich.console import Console
-from ruamel.yaml import YAML
-from ruamel.yaml.error import YAMLError
+from tomlkit.exceptions import TOMLKitError
 
 from mkapidocs.models import (
     CIProvider,
@@ -196,31 +196,88 @@ def detect_ci_provider(repo_path: Path) -> CIProvider | None:
     return None
 
 
-def ensure_mkapidocs_installed(repo_path: Path) -> None:
-    """Ensure mkapidocs is installed in the target environment.
+def _get_mkapidocs_repo_root() -> Path | None:
+    """Get the root of the mkapidocs repository if running from source.
 
-    Checks if mkapidocs is installed via 'uv pip show'. If not, installs it
-    as a dev dependency using 'uv add --dev'.
+    Returns:
+        Path to repository root if found, None otherwise.
+    """
+    # packages/mkapidocs/generator.py -> packages/mkapidocs -> packages -> root
+    current_file = Path(__file__).resolve()
+    potential_root = current_file.parents[2]
+
+    if (potential_root / "pyproject.toml").exists():
+        try:
+            with open(potential_root / "pyproject.toml", encoding="utf-8") as f:
+                config = tomlkit.load(f)
+            project = config.get("project")
+            if isinstance(project, dict) and project.get("name") == "mkapidocs":
+                return potential_root
+        except (OSError, TOMLKitError) as e:
+            console.print(f"[yellow]Debug: Failed to read pyproject.toml at {potential_root}: {e}[/yellow]")
+
+    return None
+
+
+def _run_subprocess(cmd: Sequence[str | Path], cwd: Path, env: dict[str, str]) -> int:
+    """Run a subprocess and return its exit code.
 
     Args:
-        repo_path: Path to repository.
+        cmd: Command and arguments to run.
+        cwd: Working directory.
+        env: Environment variables.
+
+    Returns:
+        Exit code from the subprocess.
     """
+    result = subprocess.run(list(cmd), cwd=cwd, env=env, capture_output=False, check=False)
+    return result.returncode
+
+
+def ensure_mkapidocs_installed(repo_path: Path) -> None:
+    """Ensure mkapidocs is installed in the target project's environment.
+
+    If not installed, it injects it:
+    - As editable install if running from mkapidocs source
+    - As dev dependency otherwise
+
+    Args:
+        repo_path: Path to target project.
+    """
+    console.print("[blue]:syringe: Injecting mkapidocs into target environment...[/blue]")
+
     if not (uv_cmd := which("uv")):
         console.print("[yellow]uv not found. Skipping mkapidocs installation check.[/yellow]")
         return
 
-    try:
-        # Check if installed
-        subprocess.run([uv_cmd, "pip", "show", "mkapidocs"], cwd=repo_path, check=True, capture_output=True)
-    except subprocess.CalledProcessError:
-        # Not installed, install it
-        console.print("[yellow]mkapidocs not found in environment. Installing as dev dependency...[/yellow]")
+    # Unset VIRTUAL_ENV to ensure uv uses the target environment
+    env = os.environ.copy()
+    if "VIRTUAL_ENV" in env:
+        del env["VIRTUAL_ENV"]
+
+    repo_root = _get_mkapidocs_repo_root()
+
+    if repo_root:
+        console.print(f"[blue]Detected mkapidocs source at {repo_root}. Installing in editable mode.[/blue]")
+        # Sync first to ensure environment exists and dependencies are installed
+        console.print("[blue]Syncing target environment...[/blue]")
+        sync_cmd = [uv_cmd, "--directory", str(repo_path), "sync"]
         try:
-            subprocess.run([uv_cmd, "add", "--dev", "mkapidocs"], cwd=repo_path, check=True)
-            console.print("[green]Successfully installed mkapidocs.[/green]")
-        except subprocess.CalledProcessError:
-            console.print("[red]Failed to install mkapidocs. Please install it manually.[/red]")
-            # We don't raise here, we let the user try to proceed or fail later
+            _run_subprocess(sync_cmd, repo_path, env)
+        except Exception as e:
+            console.print(f"[yellow]Warning: Failed to sync target environment: {e}[/yellow]")
+
+        # Use pip install -e for editable install to avoid modifying pyproject.toml with local path
+        cmd = [uv_cmd, "--directory", str(repo_path), "pip", "install", "-e", str(repo_root)]
+    else:
+        console.print("[blue]Installing mkapidocs from registry.[/blue]")
+        cmd = [uv_cmd, "--directory", str(repo_path), "add", "--dev", "mkapidocs"]
+
+    try:
+        _run_subprocess(cmd, repo_path, env)
+        console.print("[green]Successfully installed mkapidocs.[/green]")
+    except Exception as e:
+        console.print(f"[yellow]Warning: Failed to inject mkapidocs: {e}[/yellow]")
 
 
 def read_pyproject(repo_path: Path) -> PyprojectConfig:
@@ -718,36 +775,35 @@ def _check_existing_github_workflow(workflow_file: Path) -> bool:
     Returns:
         True if Pages deployment is found.
     """
-    yaml = YAML()
-    with suppress(YAMLError, OSError):
-        workflow_content = workflow_file.read_text(encoding="utf-8")
-        workflow = yaml.load(workflow_content)
+    from mkapidocs.yaml_utils import load_yaml_from_path
 
-        if not isinstance(workflow, dict) or "jobs" not in workflow:
-            return False
+    workflow = load_yaml_from_path(workflow_file)
 
-        jobs = cast(dict[str, object], workflow.get("jobs", {}))
+    if workflow is None or "jobs" not in workflow:
+        return False
 
-        for job_name, job in jobs.items():
-            if not isinstance(job, dict):
-                continue
+    jobs = cast(dict[str, object], workflow.get("jobs", {}))
 
-            # Cast job to dict[str, object] for helper functions
-            job_dict = cast(dict[str, object], job)
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
 
-            if _is_pages_job(job_dict):
-                if _uses_mkapidocs(job_dict):
-                    console.print(
-                        f"[green]Found existing pages deployment job '{job_name}' in '{workflow_file.name}' using mkapidocs.[/green]"
-                    )
-                else:
-                    console.print(
-                        f"[yellow]Found existing pages deployment job '{job_name}' in '{workflow_file.name}'.[/yellow]"
-                    )
-                    console.print(
-                        "[yellow]You should update it to run 'uv run mkapidocs build' before deployment.[/yellow]"
-                    )
-                return True
+        # Cast job to dict[str, object] for helper functions
+        job_dict = cast(dict[str, object], job)
+
+        if _is_pages_job(job_dict):
+            if _uses_mkapidocs(job_dict):
+                console.print(
+                    f"[green]Found existing pages deployment job '{job_name}' in '{workflow_file.name}' using mkapidocs.[/green]"
+                )
+            else:
+                console.print(
+                    f"[yellow]Found existing pages deployment job '{job_name}' in '{workflow_file.name}'.[/yellow]"
+                )
+                console.print(
+                    "[yellow]You should update it to run 'uv run mkapidocs build' before deployment.[/yellow]"
+                )
+            return True
 
     return False
 
@@ -792,6 +848,8 @@ def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
     Returns:
         True if pages workflow include is found.
     """
+    from mkapidocs.yaml_utils import YAMLError
+
     with suppress(YAMLError, OSError):
         config = GitLabCIConfig.load(gitlab_ci_path)
         if config is None:
@@ -821,6 +879,8 @@ def create_gitlab_ci(repo_path: Path) -> None:
     Args:
         repo_path: Path to repository.
     """
+    from mkapidocs.yaml_utils import YAMLError
+
     gitlab_ci_path = repo_path / ".gitlab-ci.yml"
     workflows_dir = repo_path / ".gitlab" / "workflows"
     pages_workflow_path = workflows_dir / "pages.gitlab-ci.yml"
@@ -1044,8 +1104,6 @@ def update_gitignore(repo_path: Path, provider: CIProvider, include_generated: b
     # Use provider-specific build directory
     build_dir = "/public/" if provider == CIProvider.GITLAB else "/site/"
     entries_to_add = [build_dir, ".mkdocs_cache/"]
-
-    # Only include docs/generated/ if explicitly requested (backward compatibility for setup)
     if include_generated:
         entries_to_add.append("docs/generated/")
 
@@ -1143,43 +1201,6 @@ def create_supporting_docs(
         _ = install_path.write_text(install_content)
     else:
         console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
-
-
-def add_mkapidocs_to_target_project(repo_path: Path) -> None:
-    """Install mkapidocs in target project's environment.
-
-    In dev mode: uses 'uv pip install -e' to avoid modifying pyproject.toml.
-    In installed mode: uses 'uv add --dev mkapidocs' to add as proper dependency.
-
-    Args:
-        repo_path: Path to target repository.
-    """
-    uv_cmd = which("uv")
-    if not uv_cmd:
-        return
-
-    # Check if mkapidocs is already installed in target environment
-    result = subprocess.run(
-        [uv_cmd, "pip", "show", "mkapidocs"], cwd=repo_path, capture_output=True, text=True, check=False
-    )
-    if result.returncode == 0:
-        return  # Already installed
-
-    # Get the path to mkapidocs source (this package)
-    mkapidocs_path = Path(__file__).parent.parent.parent
-
-    # Check if we're in development mode (running from source)
-    if (mkapidocs_path / "pyproject.toml").exists():
-        # Dev mode: install editable without modifying target's pyproject.toml
-        subprocess.run(
-            [uv_cmd, "pip", "install", "-e", str(mkapidocs_path.absolute())],
-            cwd=repo_path,
-            capture_output=True,
-            check=False,
-        )
-    else:
-        # Installed mode: add as proper dev dependency
-        subprocess.run([uv_cmd, "add", "--dev", "mkapidocs"], cwd=repo_path, capture_output=True, check=False)
 
 
 def _get_project_info(pyproject: PyprojectConfig) -> tuple[str, str, str]:
@@ -1361,7 +1382,10 @@ def setup_documentation(
 
     update_gitignore(repo_path, provider)
 
-    # Add mkapidocs to target project's dev dependencies
-    add_mkapidocs_to_target_project(repo_path)
+    # Add mkapidocs to target project's dev dependencies (now called at start, but ensuring here too is fine)
+    # Actually, we should call it at the start to ensure environment is ready for other steps if needed,
+    # but strictly speaking it's only needed for build.
+    # However, the user wants setup to handle it.
+    ensure_mkapidocs_installed(repo_path)
 
     return provider

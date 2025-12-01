@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import ClassVar, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
-from ruamel.yaml import YAML
 
 # TOML spec v1.0.0 types - https://toml.io/en/v1.0.0
 # These mirror the types in typings/tomlkit/__init__.pyi
@@ -226,14 +225,12 @@ class GitLabCIConfig:
     """GitLab CI configuration from .gitlab-ci.yml.
 
     Provides typed access to the `include` field. Other fields are stored in `extra`.
-    Use `from_dict()` to create from ruamel.yaml CommentedMap.
 
     Example:
-        yaml = YAML()
-        data = yaml.load(path)
-        config = GitLabCIConfig.from_dict(data)
-        for entry in config.include_list:
-            ...
+        config = GitLabCIConfig.load(Path(".gitlab-ci.yml"))
+        if config:
+            for entry in config.include_list:
+                ...
     """
 
     include: GitLabIncludeValueRaw | None = None
@@ -264,14 +261,10 @@ class GitLabCIConfig:
         Returns:
             GitLabCIConfig if file contains valid YAML dict, None otherwise.
         """
-        if not path.exists():
-            return None
+        from mkapidocs.yaml_utils import load_yaml_from_path
 
-        yaml = YAML()
-        content = path.read_text(encoding="utf-8")
-        data = yaml.load(content)
-
-        if isinstance(data, dict):
+        data = load_yaml_from_path(path)
+        if data is not None:
             return cls.from_dict(data)
         return None
 
@@ -288,24 +281,9 @@ class GitLabCIConfig:
         Returns:
             True if successfully modified and saved, False if file structure invalid.
         """
-        from io import StringIO
+        from mkapidocs.yaml_utils import append_to_yaml_list
 
-        yaml = YAML()
-        yaml.preserve_quotes = True
-
-        content = path.read_text(encoding="utf-8")
-        raw_config = yaml.load(content)
-
-        if not isinstance(raw_config, dict):
-            return False
-
-        config = cls.from_dict(raw_config)
-        raw_config["include"] = [*config.include_list, include_entry]
-
-        stream = StringIO()
-        yaml.dump(raw_config, stream)
-        _ = path.write_text(stream.getvalue(), encoding="utf-8")
-        return True
+        return append_to_yaml_list(path, "include", include_entry)
 
     @property
     def include_list(self) -> list[GitLabIncludeEntryRaw]:

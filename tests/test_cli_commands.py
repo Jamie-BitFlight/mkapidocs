@@ -455,10 +455,10 @@ class TestServeCommand:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test")
 
         # Act
-        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path), "--host", "0.0.0.0", "--port", "9000"])  # noqa: S104
+        result = cli_runner.invoke(typer_app, ["serve", str(mock_repo_path), "--host", "0.0.0.0", "--port", "9000"])
 
         # Assert
         assert result.exit_code == 0
         mock_serve.assert_called_once()
-        assert mock_serve.call_args[1]["host"] == "0.0.0.0"  # noqa: S104
+        assert mock_serve.call_args[1]["host"] == "0.0.0.0"
         assert mock_serve.call_args[1]["port"] == 9000

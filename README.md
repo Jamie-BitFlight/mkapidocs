@@ -228,14 +228,17 @@ your-project/
 The script auto-detects:
 
 1. **C/C++ Code**: Looks for .c, .h, .cpp, .hpp files in source/ directory
+
    - Adds mkdoxy plugin for Doxygen documentation
    - Creates C API reference page
 
 2. **Typer CLI**: Checks for typer dependency in pyproject.toml
+
    - Adds mkdocs-typer2 plugin
    - Creates CLI reference page
 
 3. **Private Registry**: Checks for [tool.uv.index] in pyproject.toml
+
    - Adds installation instructions with --index flag
    - Documents registry configuration
 

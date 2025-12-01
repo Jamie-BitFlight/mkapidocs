@@ -3,21 +3,23 @@
 Tests cover:
 - build_docs(): MkDocs build integration with various flags
 - serve_docs(): MkDocs serve integration with custom host/port
-- get_source_paths_from_pyproject(): Source path detection for PYTHONPATH
+- is_mkapidocs_in_target_env(): Check if mkapidocs installed in target env
 - Error handling: missing files, missing commands, subprocess failures
 """
 
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from mkapidocs.builder import build_docs, is_mkapidocs_in_target_env, serve_docs
 from pytest_mock import MockerFixture
 
-# Get actual uvx path for assertions (may be None if not installed)
-ACTUAL_UVX_PATH = shutil.which("uvx")
+# Get actual uv path for assertions (may be None if not installed)
+ACTUAL_UV_PATH = shutil.which("uv")
 
 
 class TestBuildDocs:
@@ -27,10 +29,10 @@ class TestBuildDocs:
     """
 
     def test_build_docs_success(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test successful documentation build.
+        """Test successful documentation build via target environment.
 
-        Tests: build_docs() basic functionality via uvx fallback path
-        How: Mock mkdocs.yml existence, subprocess.run, and ensure uvx fallback
+        Tests: build_docs() basic functionality via target environment path
+        How: Mock mkdocs.yml existence, subprocess.run, and mkapidocs in target env
         Why: Verify build command construction and execution
 
         Args:
@@ -42,13 +44,13 @@ class TestBuildDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        # Force uvx fallback path by mocking target env checks
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        # Mock mkapidocs installed in target env
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mock_subprocess = mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
 
         # Act
         exit_code = build_docs(mock_repo_path)
@@ -57,9 +59,9 @@ class TestBuildDocs:
         assert exit_code == 0
         mock_subprocess.assert_called_once()
         cmd = mock_subprocess.call_args[0][0]
-        # Check that uvx was used (path may vary by environment)
-        assert "uvx" in cmd[0] or cmd[0].endswith("uvx")
-        assert "mkdocs" in cmd
+        # Check that uv was used (path may vary by environment)
+        assert "uv" in cmd[0] or cmd[0].endswith("uv")
+        assert "mkapidocs" in cmd
         assert "build" in cmd
 
     def test_build_docs_with_strict_flag(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
@@ -77,12 +79,12 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mock_subprocess = mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
 
         # Act
         exit_code = build_docs(mock_repo_path, strict=True)
@@ -98,7 +100,7 @@ class TestBuildDocs:
         """Test build with custom output directory.
 
         Tests: build_docs(output_dir=custom_path)
-        How: Mock successful build, verify --site-dir in command args
+        How: Mock successful build, verify --output-dir in command args
         Why: Ensure custom output location is properly passed to mkdocs
 
         Args:
@@ -111,12 +113,12 @@ class TestBuildDocs:
         (mock_repo_path / "docs").mkdir()
         custom_output = tmp_path / "custom_site"
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mock_subprocess = mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
 
         # Act
         exit_code = build_docs(mock_repo_path, output_dir=custom_output)
@@ -124,7 +126,7 @@ class TestBuildDocs:
         # Assert
         assert exit_code == 0
         cmd = mock_subprocess.call_args[0][0]
-        assert "--site-dir" in cmd
+        assert "--output-dir" in cmd
         assert str(custom_output) in cmd
 
     def test_build_docs_missing_mkdocs_yml(self, mock_repo_path: Path) -> None:
@@ -141,11 +143,11 @@ class TestBuildDocs:
         with pytest.raises(FileNotFoundError, match=r"mkdocs\.yml not found"):
             build_docs(mock_repo_path)
 
-    def test_build_docs_missing_uvx_command(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test build fails when uvx command not found.
+    def test_build_docs_missing_uv_command(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test build fails when uv command not found.
 
         Tests: build_docs() error handling
-        How: Mock which() to return None, force uvx fallback path
+        How: Mock which() to return None for uv, but mkapidocs is in target env
         Why: Verify helpful error when uv not installed
 
         Args:
@@ -156,13 +158,34 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        # Force uvx fallback path, then uvx returns None
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
         mocker.patch("mkapidocs.builder.which", return_value=None)
 
         # Act & Assert
-        with pytest.raises(FileNotFoundError, match="uvx command not found"):
+        with pytest.raises(FileNotFoundError, match="uv command not found"):
+            build_docs(mock_repo_path)
+
+    def test_build_docs_mkapidocs_not_installed(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test build fails with RuntimeError when mkapidocs not in target env.
+
+        Tests: build_docs() error handling
+        How: Mock is_mkapidocs_in_target_env to return False
+        Why: Verify user is told to run setup first
+
+        Args:
+            mocker: pytest-mock fixture for mocking
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
+        (mock_repo_path / "docs").mkdir()
+
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+
+        # Act & Assert
+        with pytest.raises(RuntimeError, match="mkapidocs is not installed"):
             build_docs(mock_repo_path)
 
     def test_build_docs_subprocess_failure(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
@@ -180,12 +203,12 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 1
-        mocker.patch("subprocess.run", return_value=mock_result)
+        mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
 
         # Act
         exit_code = build_docs(mock_repo_path)
@@ -193,12 +216,12 @@ class TestBuildDocs:
         # Assert
         assert exit_code == 1
 
-    def test_build_docs_includes_all_required_plugins(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test build command includes all mkdocs plugins via --with flags.
+    def test_build_docs_internal_call_uses_mkdocs_directly(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test internal calls (via MKAPIDOCS_INTERNAL_CALL) use mkdocs directly.
 
-        Tests: build_docs() plugin installation
-        How: Mock subprocess, verify --with flags in command
-        Why: All plugins must be available for mkdocs build
+        Tests: build_docs() internal call path
+        How: Mock is_running_in_target_env to return True, verify mkdocs is called directly
+        Why: Prevent infinite recursion and use mkdocs directly when already in target env
 
         Args:
             mocker: pytest-mock fixture for mocking
@@ -208,23 +231,20 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=True)
+        mocker.patch("mkapidocs.builder.which", return_value="/usr/bin/mkdocs")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mock_subprocess = mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
 
         # Act
-        build_docs(mock_repo_path)
+        exit_code = build_docs(mock_repo_path)
 
         # Assert
+        assert exit_code == 0
         cmd = mock_subprocess.call_args[0][0]
-        cmd_str = " ".join(cmd)
-        assert "--with" in cmd_str
-        assert "mkdocs-material" in cmd_str
-        assert "mkdocstrings" in cmd_str
-        assert "mkdocs-typer2" in cmd_str
+        assert cmd[0] == "/usr/bin/mkdocs"
+        assert "build" in cmd
 
 
 class TestServeDocs:
@@ -234,10 +254,10 @@ class TestServeDocs:
     """
 
     def test_serve_docs_success(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test successful documentation server start.
+        """Test successful documentation server start via target environment.
 
-        Tests: serve_docs() basic functionality via uvx fallback path
-        How: Mock mkdocs.yml existence, subprocess.run, and ensure uvx fallback
+        Tests: serve_docs() basic functionality via target environment path
+        How: Mock mkdocs.yml existence, subprocess.Popen, and mkapidocs in target env
         Why: Verify serve command construction and execution
 
         Args:
@@ -249,32 +269,34 @@ class TestServeDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        # Force uvx fallback path
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        # Mock mkapidocs installed in target env
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
+
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 0
+        mock_popen = mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
 
         # Act
         exit_code = serve_docs(mock_repo_path)
 
         # Assert
         assert exit_code == 0
-        mock_subprocess.assert_called_once()
-        cmd = mock_subprocess.call_args[0][0]
-        # Check that uvx was used (path may vary by environment)
-        assert "uvx" in cmd[0] or cmd[0].endswith("uvx")
-        assert "mkdocs" in cmd
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        # Check that uv was used (path may vary by environment)
+        assert "uv" in cmd[0] or cmd[0].endswith("uv")
+        assert "mkapidocs" in cmd
         assert "serve" in cmd
 
     def test_serve_docs_with_custom_host_and_port(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test serve with custom host and port.
 
         Tests: serve_docs(host='0.0.0.0', port=9000)
-        How: Mock subprocess, verify --dev-addr in command args
-        Why: Ensure custom server address is properly passed to mkdocs
+        How: Mock subprocess, verify --host and --port in command args
+        Why: Ensure custom server address is properly passed to mkapidocs
 
         Args:
             mocker: pytest-mock fixture for mocking
@@ -284,27 +306,31 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
+
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 0
+        mock_popen = mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
 
         # Act
-        exit_code = serve_docs(mock_repo_path, host="0.0.0.0", port=9000)  # noqa: S104
+        exit_code = serve_docs(mock_repo_path, host="0.0.0.0", port=9000)
 
         # Assert
         assert exit_code == 0
-        cmd = mock_subprocess.call_args[0][0]
-        assert "--dev-addr" in cmd
-        assert "0.0.0.0:9000" in cmd
+        cmd = mock_popen.call_args[0][0]
+        assert "--host" in cmd
+        assert "0.0.0.0" in cmd
+        assert "--port" in cmd
+        assert "9000" in cmd
 
     def test_serve_docs_default_address(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test serve uses default localhost:8000 when not specified.
 
         Tests: serve_docs() default parameters
-        How: Mock subprocess, verify default --dev-addr
+        How: Mock subprocess, verify default --host and --port
         Why: Ensure sensible defaults for local development
 
         Args:
@@ -315,26 +341,30 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
+
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 0
+        mock_popen = mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
 
         # Act
         serve_docs(mock_repo_path)
 
         # Assert
-        cmd = mock_subprocess.call_args[0][0]
-        assert "--dev-addr" in cmd
-        assert "127.0.0.1:8000" in cmd
+        cmd = mock_popen.call_args[0][0]
+        assert "--host" in cmd
+        assert "127.0.0.1" in cmd
+        assert "--port" in cmd
+        assert "8000" in cmd
 
     def test_serve_docs_keyboard_interrupt_graceful_exit(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test serve handles Ctrl+C (KeyboardInterrupt) gracefully.
 
         Tests: serve_docs() KeyboardInterrupt handling
-        How: Mock subprocess.run to raise KeyboardInterrupt
+        How: Mock subprocess.Popen.wait to raise KeyboardInterrupt first, then return
         Why: Verify clean shutdown on user interrupt
 
         Args:
@@ -345,16 +375,23 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mocker.patch("subprocess.run", side_effect=KeyboardInterrupt)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
+
+        mock_process = mocker.MagicMock()
+        # First wait() raises KeyboardInterrupt, second wait() (after signal) returns normally
+        mock_process.wait.side_effect = [KeyboardInterrupt, None]
+        mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
 
         # Act
         exit_code = serve_docs(mock_repo_path)
 
         # Assert
         assert exit_code == 0
+        # Verify SIGINT was sent to child process
+        mock_process.send_signal.assert_called()
 
     def test_serve_docs_missing_mkdocs_yml(self, mock_repo_path: Path) -> None:
         """Test serve fails with FileNotFoundError when mkdocs.yml missing.
@@ -370,11 +407,11 @@ class TestServeDocs:
         with pytest.raises(FileNotFoundError, match=r"mkdocs\.yml not found"):
             serve_docs(mock_repo_path)
 
-    def test_serve_docs_missing_uvx_command(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test serve fails when uvx command not found.
+    def test_serve_docs_missing_uv_command(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test serve fails when uv command not found.
 
         Tests: serve_docs() error handling
-        How: Mock which() to return None, force uvx fallback path
+        How: Mock which() to return None for uv, but mkapidocs is in target env
         Why: Verify helpful error when uv not installed
 
         Args:
@@ -385,21 +422,21 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        # Force uvx fallback path, then uvx returns None
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
         mocker.patch("mkapidocs.builder.which", return_value=None)
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
 
         # Act & Assert
-        with pytest.raises(FileNotFoundError, match="uvx command not found"):
+        with pytest.raises(FileNotFoundError, match="uv command not found"):
             serve_docs(mock_repo_path)
 
-    def test_serve_docs_subprocess_failure(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test serve returns non-zero exit code on mkdocs failure.
+    def test_serve_docs_mkapidocs_not_installed(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test serve fails with RuntimeError when mkapidocs not in target env.
 
-        Tests: serve_docs() subprocess error handling
-        How: Mock subprocess.run to return non-zero exit code
-        Why: Verify serve failures are propagated to caller
+        Tests: serve_docs() error handling
+        How: Mock is_mkapidocs_in_target_env to return False
+        Why: Verify user is told to run setup first
 
         Args:
             mocker: pytest-mock fixture for mocking
@@ -411,10 +448,34 @@ class TestServeDocs:
 
         mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
         mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 1
-        mocker.patch("subprocess.run", return_value=mock_result)
+
+        # Act & Assert
+        with pytest.raises(RuntimeError, match="mkapidocs is not installed"):
+            serve_docs(mock_repo_path)
+
+    def test_serve_docs_subprocess_failure(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test serve returns non-zero exit code on mkdocs failure.
+
+        Tests: serve_docs() subprocess error handling
+        How: Mock subprocess.Popen.wait to return non-zero exit code
+        Why: Verify serve failures are propagated to caller
+
+        Args:
+            mocker: pytest-mock fixture for mocking
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
+        (mock_repo_path / "docs").mkdir()
+
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=False)
+
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 1
+        mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
 
         # Act
         exit_code = serve_docs(mock_repo_path)
@@ -422,66 +483,92 @@ class TestServeDocs:
         # Assert
         assert exit_code == 1
 
+    def test_serve_docs_kills_existing_process_on_port(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test serve kills existing process on port before starting.
+
+        Tests: serve_docs() port conflict handling
+        How: Mock _is_port_in_use to return True, verify _kill_process_on_port called
+        Why: Ensure graceful handling of port already in use
+
+        Args:
+            mocker: pytest-mock fixture for mocking
+            mock_repo_path: Temporary repository directory
+        """
+        # Arrange
+        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
+        (mock_repo_path / "docs").mkdir()
+
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UV_PATH or "/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder._is_port_in_use", return_value=True)
+        mock_kill = mocker.patch("mkapidocs.builder._kill_process_on_port", return_value=True)
+
+        mock_process = mocker.MagicMock()
+        mock_process.wait.return_value = 0
+        mocker.patch("mkapidocs.builder.subprocess.Popen", return_value=mock_process)
+
+        # Act
+        serve_docs(mock_repo_path)
+
+        # Assert
+        mock_kill.assert_called_once_with(8000)
+
 
 class TestIsMkapidocsInTargetEnv:
-    """Test suite for is_mkapidocs_in_target_env function."""
+    """Test suite for is_mkapidocs_in_target_env function.
 
-    def test_returns_false_if_no_pyproject(self, mock_repo_path: Path) -> None:
-        """Test returns False when pyproject.toml is missing.
+    Tests use subprocess mocking since the function now uses 'uv pip freeze'.
+    """
 
-        Tests: is_mkapidocs_in_target_env handles missing file
+    def test_returns_false_if_uv_not_installed(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test returns False when uv is not installed.
+
+        Tests: is_mkapidocs_in_target_env handles missing uv
         """
+        mocker.patch("mkapidocs.builder.which", return_value=None)
         assert not is_mkapidocs_in_target_env(mock_repo_path)
 
-    def test_returns_false_if_no_dev_dependencies(self, mock_repo_path: Path) -> None:
-        """Test returns False when no dev dependencies defined.
+    def test_returns_false_if_pip_freeze_fails(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test returns False when uv pip freeze fails.
 
-        Tests: is_mkapidocs_in_target_env handles missing config
+        Tests: is_mkapidocs_in_target_env handles subprocess failure
         """
-        (mock_repo_path / "pyproject.toml").write_text("[project]\nname='test'")
+        mocker.patch("mkapidocs.builder.which", return_value="/usr/local/bin/uv")
+        mocker.patch("mkapidocs.builder.subprocess.run", side_effect=subprocess.CalledProcessError(1, "uv pip freeze"))
         assert not is_mkapidocs_in_target_env(mock_repo_path)
 
-    def test_returns_true_if_mkapidocs_in_dev_dependencies(self, mock_repo_path: Path) -> None:
-        """Test returns True when mkapidocs is in dev dependencies.
+    def test_returns_true_if_mkapidocs_in_freeze_output(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test returns True when mkapidocs is in pip freeze output.
 
-        Tests: is_mkapidocs_in_target_env detects dependency
+        Tests: is_mkapidocs_in_target_env detects mkapidocs
         """
-        content = """
-[project]
-name = "test"
-
-[dependency-groups]
-dev = ["mkapidocs", "pytest"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(content)
+        mocker.patch("mkapidocs.builder.which", return_value="/usr/local/bin/uv")
+        mock_result = MagicMock()
+        mock_result.stdout = "pytest==7.0.0\nmkapidocs==0.1.0\nruff==0.1.0\n"
+        mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
         assert is_mkapidocs_in_target_env(mock_repo_path)
 
-    def test_returns_true_if_mkapidocs_with_version_in_dev_dependencies(self, mock_repo_path: Path) -> None:
-        """Test returns True when mkapidocs with version constraint is in dev dependencies.
+    def test_returns_true_if_mkapidocs_with_extras_in_freeze_output(
+        self, mocker: MockerFixture, mock_repo_path: Path
+    ) -> None:
+        """Test returns True when mkapidocs with extras is in pip freeze output.
 
-        Tests: is_mkapidocs_in_target_env detects dependency with version
+        Tests: is_mkapidocs_in_target_env detects mkapidocs with extras
         """
-        content = """
-[project]
-name = "test"
-
-[dependency-groups]
-dev = ["mkapidocs>=0.1.0", "pytest"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(content)
+        mocker.patch("mkapidocs.builder.which", return_value="/usr/local/bin/uv")
+        mock_result = MagicMock()
+        mock_result.stdout = "pytest==7.0.0\nmkapidocs[all]==0.1.0\nruff==0.1.0\n"
+        mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
         assert is_mkapidocs_in_target_env(mock_repo_path)
 
-    def test_returns_false_if_mkapidocs_not_in_dev_dependencies(self, mock_repo_path: Path) -> None:
-        """Test returns False when mkapidocs is not in dev dependencies.
+    def test_returns_false_if_mkapidocs_not_in_freeze_output(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+        """Test returns False when mkapidocs is not in pip freeze output.
 
         Tests: is_mkapidocs_in_target_env correctly identifies absence
         """
-        content = """
-[project]
-name = "test"
-
-[dependency-groups]
-dev = ["pytest", "ruff"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(content)
+        mocker.patch("mkapidocs.builder.which", return_value="/usr/local/bin/uv")
+        mock_result = MagicMock()
+        mock_result.stdout = "pytest==7.0.0\nruff==0.1.0\nmkdocs==1.5.0\n"
+        mocker.patch("mkapidocs.builder.subprocess.run", return_value=mock_result)
         assert not is_mkapidocs_in_target_env(mock_repo_path)

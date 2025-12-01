@@ -59,6 +59,7 @@ All script dependencies are installed in the dev dependency group to enable dire
 ### Coverage by Functional Area
 
 1. **Feature Detection (24% coverage)** ✅
+
    - ✅ Git remote URL parsing for GitHub Pages
    - ✅ C/C++ code detection in source/
    - ✅ Typer dependency detection
@@ -66,12 +67,14 @@ All script dependencies are installed in the dev dependency group to enable dire
    - ✅ Private registry detection from pyproject.toml
 
 2. **Configuration Management (7% coverage)** ✅
+
    - ✅ Reading pyproject.toml files
    - ✅ Writing pyproject.toml files
    - ✅ Extracting source paths from build config
    - ✅ Updating ruff docstring linting rules
 
 3. **CLI Commands (0% effective coverage)** ⚠️
+
    - ⚠️ 15 CLI tests exist but have mocking issues
    - ⚠️ Tests pass individually but fail in pytest suite
    - ⚠️ Issue: Module import state conflicts between test files

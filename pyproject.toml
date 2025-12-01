@@ -109,6 +109,7 @@ ignore = [
     "S404",
     "S506",
     "S603",
+    "S104",
     "T201",
     "TRY003",
     "S404",   # subprocess module import is needed for system integration
