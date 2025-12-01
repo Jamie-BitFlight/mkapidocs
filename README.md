@@ -452,6 +452,25 @@ where = ["src"]
 
 If your package is in a non-standard location, the build command may fail to import it. Verify your build configuration matches your actual package structure.
 
+### Pre-commit check-yaml fails on mkdocs.yml
+
+If you use pre-commit with the `check-yaml` hook, it may fail on mkdocs.yml with an error like:
+
+```
+could not determine a constructor for the tag 'tag:yaml.org,2002:python/name:mermaid2.fence_mermaid_custom'
+```
+
+This happens because mkapidocs generates mkdocs.yml with Python-specific YAML tags (`!!python/name:`) for the mermaid2 plugin. Add the `--unsafe` flag to allow these tags:
+
+```yaml
+# In your .pre-commit-config.yaml
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v5.0.0
+  hooks:
+    - id: check-yaml
+      args: [--unsafe] # Allow Python tags in mkdocs.yml
+```
+
 ## License
 
 Unlicense
