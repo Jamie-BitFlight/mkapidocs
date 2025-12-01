@@ -19,28 +19,22 @@ def _get_hatch_version() -> str | None:
         The version string from hatchling, or None if hatchling is not installed.
     """
     try:
-        # hatchling is an optional development dependency without type stubs
-        from hatchling.metadata.core import (  # pyright: ignore[reportMissingImports]
-            ProjectMetadata,  # pyright: ignore[reportUnknownVariableType]
-        )
-        from hatchling.plugin.manager import (  # pyright: ignore[reportMissingImports]
-            PluginManager,  # pyright: ignore[reportUnknownVariableType]
-        )
-        from hatchling.utils.fs import locate_file  # pyright: ignore[reportMissingImports,reportUnknownVariableType]
+        from hatchling.metadata.core import ProjectMetadata
+        from hatchling.plugin.manager import PluginManager
+        from hatchling.utils.fs import locate_file
     except ImportError:
         # Hatchling is not installed, so probably we are not in
         # a development environment.
         return None
 
-    # All following lines interact with untyped hatchling library
-    pyproject_toml = locate_file(__file__, "pyproject.toml")  # pyright: ignore[reportUnknownVariableType]
+    pyproject_toml = locate_file(__file__, "pyproject.toml")
     if pyproject_toml is None:
         raise RuntimeError("pyproject.toml not found although hatchling is installed")
-    root = os.path.dirname(pyproject_toml)  # pyright: ignore[reportUnknownVariableType,reportUnknownArgumentType]
-    metadata = ProjectMetadata(root=root, plugin_manager=PluginManager())  # pyright: ignore[reportUnknownVariableType]
+    root = os.path.dirname(pyproject_toml)
+    metadata = ProjectMetadata(root=root, plugin_manager=PluginManager())
     # Version can be either statically set in pyproject.toml or computed dynamically:
-    version_value = metadata.core.version or metadata.hatch.version.cached  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
-    return str(version_value)  # pyright: ignore[reportUnknownArgumentType]
+    version_value = metadata.core.version or metadata.hatch.version.cached
+    return str(version_value)
 
 
 def _get_importlib_metadata_version() -> str:

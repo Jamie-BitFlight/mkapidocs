@@ -9,27 +9,15 @@ Tests cover:
 
 from __future__ import annotations
 
-import sys
+import shutil
 from pathlib import Path
 
 import pytest
+from mkapidocs.builder import build_docs, is_mkapidocs_in_target_env, serve_docs
 from pytest_mock import MockerFixture
 
-
-# Access mkapidocs module functions (deferred lookup at test runtime)
-def build_docs(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.build_docs with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].build_docs(*args, **kwargs)
-
-
-def serve_docs(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.serve_docs with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].serve_docs(*args, **kwargs)
-
-
-def get_source_paths_from_pyproject(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.get_source_paths_from_pyproject with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].get_source_paths_from_pyproject(*args, **kwargs)
+# Get actual uvx path for assertions (may be None if not installed)
+ACTUAL_UVX_PATH = shutil.which("uvx")
 
 
 class TestBuildDocs:
@@ -41,8 +29,8 @@ class TestBuildDocs:
     def test_build_docs_success(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test successful documentation build.
 
-        Tests: build_docs() basic functionality
-        How: Mock mkdocs.yml existence, subprocess.run, and which()
+        Tests: build_docs() basic functionality via uvx fallback path
+        How: Mock mkdocs.yml existence, subprocess.run, and ensure uvx fallback
         Why: Verify build command construction and execution
 
         Args:
@@ -54,7 +42,10 @@ class TestBuildDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        # Force uvx fallback path by mocking target env checks
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -66,7 +57,8 @@ class TestBuildDocs:
         assert exit_code == 0
         mock_subprocess.assert_called_once()
         cmd = mock_subprocess.call_args[0][0]
-        assert cmd[0] == "/usr/local/bin/uvx"
+        # Check that uvx was used (path may vary by environment)
+        assert "uvx" in cmd[0] or cmd[0].endswith("uvx")
         assert "mkdocs" in cmd
         assert "build" in cmd
 
@@ -85,7 +77,9 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -117,7 +111,9 @@ class TestBuildDocs:
         (mock_repo_path / "docs").mkdir()
         custom_output = tmp_path / "custom_site"
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -149,7 +145,7 @@ class TestBuildDocs:
         """Test build fails when uvx command not found.
 
         Tests: build_docs() error handling
-        How: Mock which() to return None
+        How: Mock which() to return None, force uvx fallback path
         Why: Verify helpful error when uv not installed
 
         Args:
@@ -160,7 +156,10 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value=None)
+        # Force uvx fallback path, then uvx returns None
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=None)
 
         # Act & Assert
         with pytest.raises(FileNotFoundError, match="uvx command not found"):
@@ -181,7 +180,9 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 1
         mocker.patch("subprocess.run", return_value=mock_result)
@@ -208,7 +209,9 @@ class TestBuildDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mocker.patch("subprocess.run", return_value=mock_result)
@@ -221,38 +224,6 @@ class TestBuildDocs:
         assert gen_ref_script.exists()
         content = gen_ref_script.read_text()
         assert "mkdocs-gen-files" in content or "gen_files" in content
-
-    def test_build_docs_sets_pythonpath_from_source_paths(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test build sets PYTHONPATH environment variable from pyproject.toml.
-
-        Tests: build_docs() PYTHONPATH configuration
-        How: Mock get_source_paths_from_pyproject, verify env passed to subprocess
-        Why: mkdocstrings needs PYTHONPATH to import project modules
-
-        Args:
-            mocker: pytest-mock fixture for mocking
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
-        (mock_repo_path / "docs").mkdir()
-
-        src_path = mock_repo_path / "src"
-        mocker.patch("mkapidocs.get_source_paths_from_pyproject", return_value=[src_path])
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
-
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
-
-        # Act
-        build_docs(mock_repo_path)
-
-        # Assert
-        call_kwargs = mock_subprocess.call_args[1]
-        env = call_kwargs["env"]
-        assert "PYTHONPATH" in env
-        assert str(src_path) in env["PYTHONPATH"]
 
     def test_build_docs_includes_all_required_plugins(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test build command includes all mkdocs plugins via --with flags.
@@ -269,7 +240,9 @@ class TestBuildDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -295,8 +268,8 @@ class TestServeDocs:
     def test_serve_docs_success(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test successful documentation server start.
 
-        Tests: serve_docs() basic functionality
-        How: Mock mkdocs.yml existence, subprocess.run, and which()
+        Tests: serve_docs() basic functionality via uvx fallback path
+        How: Mock mkdocs.yml existence, subprocess.run, and ensure uvx fallback
         Why: Verify serve command construction and execution
 
         Args:
@@ -308,7 +281,10 @@ class TestServeDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        # Force uvx fallback path
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -320,7 +296,8 @@ class TestServeDocs:
         assert exit_code == 0
         mock_subprocess.assert_called_once()
         cmd = mock_subprocess.call_args[0][0]
-        assert cmd[0] == "/usr/local/bin/uvx"
+        # Check that uvx was used (path may vary by environment)
+        assert "uvx" in cmd[0] or cmd[0].endswith("uvx")
         assert "mkdocs" in cmd
         assert "serve" in cmd
 
@@ -339,7 +316,9 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -368,7 +347,9 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
@@ -396,7 +377,9 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mocker.patch("subprocess.run", side_effect=KeyboardInterrupt)
 
         # Act
@@ -423,7 +406,7 @@ class TestServeDocs:
         """Test serve fails when uvx command not found.
 
         Tests: serve_docs() error handling
-        How: Mock which() to return None
+        How: Mock which() to return None, force uvx fallback path
         Why: Verify helpful error when uv not installed
 
         Args:
@@ -434,7 +417,10 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value=None)
+        # Force uvx fallback path, then uvx returns None
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=None)
 
         # Act & Assert
         with pytest.raises(FileNotFoundError, match="uvx command not found"):
@@ -455,7 +441,9 @@ class TestServeDocs:
         (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
         (mock_repo_path / "docs").mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 1
         mocker.patch("subprocess.run", return_value=mock_result)
@@ -482,7 +470,9 @@ class TestServeDocs:
         docs_dir = mock_repo_path / "docs"
         docs_dir.mkdir()
 
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
+        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
         mock_result = mocker.MagicMock()
         mock_result.returncode = 0
         mocker.patch("subprocess.run", return_value=mock_result)
@@ -494,286 +484,66 @@ class TestServeDocs:
         gen_ref_script = docs_dir / "generated" / "gen_ref_pages.py"
         assert gen_ref_script.exists()
 
-    def test_serve_docs_sets_pythonpath_from_source_paths(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test serve sets PYTHONPATH environment variable from pyproject.toml.
 
-        Tests: serve_docs() PYTHONPATH configuration
-        How: Mock get_source_paths_from_pyproject, verify env passed to subprocess
-        Why: mkdocstrings needs PYTHONPATH to import project modules during live reload
+class TestIsMkapidocsInTargetEnv:
+    """Test suite for is_mkapidocs_in_target_env function."""
 
-        Args:
-            mocker: pytest-mock fixture for mocking
-            mock_repo_path: Temporary repository directory
+    def test_returns_false_if_no_pyproject(self, mock_repo_path: Path) -> None:
+        """Test returns False when pyproject.toml is missing.
+
+        Tests: is_mkapidocs_in_target_env handles missing file
         """
-        # Arrange
-        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
-        (mock_repo_path / "docs").mkdir()
+        assert not is_mkapidocs_in_target_env(mock_repo_path)
 
-        src_path = mock_repo_path / "src"
-        mocker.patch("mkapidocs.get_source_paths_from_pyproject", return_value=[src_path])
-        mocker.patch("mkapidocs.which", return_value="/usr/local/bin/uvx")
+    def test_returns_false_if_no_dev_dependencies(self, mock_repo_path: Path) -> None:
+        """Test returns False when no dev dependencies defined.
 
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mock_subprocess = mocker.patch("subprocess.run", return_value=mock_result)
-
-        # Act
-        serve_docs(mock_repo_path)
-
-        # Assert
-        call_kwargs = mock_subprocess.call_args[1]
-        env = call_kwargs["env"]
-        assert "PYTHONPATH" in env
-        assert str(src_path) in env["PYTHONPATH"]
-
-
-class TestGetSourcePathsFromPyproject:
-    """Test suite for get_source_paths_from_pyproject() function.
-
-    Tests source path detection from various pyproject.toml configurations.
-    """
-
-    def test_returns_empty_list_when_no_pyproject_toml(self, mock_repo_path: Path) -> None:
-        """Test returns empty list when pyproject.toml missing.
-
-        Tests: get_source_paths_from_pyproject()
-        How: Call function with repo path without pyproject.toml
-        Why: Verify graceful handling of missing configuration
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Tests: is_mkapidocs_in_target_env handles missing config
         """
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
+        (mock_repo_path / "pyproject.toml").write_text("[project]\nname='test'")
+        assert not is_mkapidocs_in_target_env(mock_repo_path)
 
-        # Assert
-        assert paths == []
+    def test_returns_true_if_mkapidocs_in_dev_dependencies(self, mock_repo_path: Path) -> None:
+        """Test returns True when mkapidocs is in dev dependencies.
 
-    def test_returns_empty_list_when_pyproject_toml_invalid(self, mock_repo_path: Path) -> None:
-        """Test returns empty list when pyproject.toml has invalid TOML.
-
-        Tests: get_source_paths_from_pyproject() error handling
-        How: Create malformed TOML file
-        Why: Verify parse errors don't crash function
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Tests: is_mkapidocs_in_target_env detects dependency
         """
-        # Arrange
-        pyproject_path = mock_repo_path / "pyproject.toml"
-        pyproject_path.write_text("[project\nname = invalid")  # Missing closing bracket
+        content = """
+[project]
+name = "test"
 
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert paths == []
-
-    def test_detects_hatch_sources_mapping(self, mock_repo_path: Path) -> None:
-        """Test detects source paths from Hatch sources configuration.
-
-        Tests: get_source_paths_from_pyproject() Hatch sources support
-        How: Create pyproject.toml with [tool.hatch.build.targets.wheel] sources
-        Why: Verify Hatch sources mapping is parsed correctly
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-
-[tool.hatch.build.targets.wheel]
-sources = {"packages/mypackage" = "mypackage"}
+[dependency-groups]
+dev = ["mkapidocs", "pytest"]
 """
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
+        (mock_repo_path / "pyproject.toml").write_text(content)
+        assert is_mkapidocs_in_target_env(mock_repo_path)
 
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
+    def test_returns_true_if_mkapidocs_with_version_in_dev_dependencies(self, mock_repo_path: Path) -> None:
+        """Test returns True when mkapidocs with version constraint is in dev dependencies.
 
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "packages"
-
-    def test_detects_hatch_packages_list(self, mock_repo_path: Path) -> None:
-        """Test detects source paths from Hatch packages list.
-
-        Tests: get_source_paths_from_pyproject() Hatch packages support
-        How: Create pyproject.toml with [tool.hatch.build.targets.wheel] packages
-        Why: Verify Hatch packages list is parsed correctly
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Tests: is_mkapidocs_in_target_env detects dependency with version
         """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
+        content = """
+[project]
+name = "test"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/mypackage"]
+[dependency-groups]
+dev = ["mkapidocs>=0.1.0", "pytest"]
 """
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
+        (mock_repo_path / "pyproject.toml").write_text(content)
+        assert is_mkapidocs_in_target_env(mock_repo_path)
 
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
+    def test_returns_false_if_mkapidocs_not_in_dev_dependencies(self, mock_repo_path: Path) -> None:
+        """Test returns False when mkapidocs is not in dev dependencies.
 
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "src"
-
-    def test_detects_setuptools_where_configuration(self, mock_repo_path: Path) -> None:
-        """Test detects source paths from setuptools where configuration.
-
-        Tests: get_source_paths_from_pyproject() setuptools support
-        How: Create pyproject.toml with [tool.setuptools.packages.find] where
-        Why: Verify setuptools configuration is parsed correctly
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Tests: is_mkapidocs_in_target_env correctly identifies absence
         """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
+        content = """
+[project]
+name = "test"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[dependency-groups]
+dev = ["pytest", "ruff"]
 """
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "src"
-
-    def test_detects_setuptools_where_string(self, mock_repo_path: Path) -> None:
-        """Test handles setuptools where as string instead of list.
-
-        Tests: get_source_paths_from_pyproject() flexible input handling
-        How: Create pyproject.toml with where as string
-        Why: Verify function handles both string and list formats
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-
-[tool.setuptools.packages.find]
-where = "lib"
-"""
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "lib"
-
-    def test_returns_empty_list_when_no_configuration_found(self, mock_repo_path: Path) -> None:
-        """Test returns empty list when no build configuration present.
-
-        Tests: get_source_paths_from_pyproject() fallback behavior
-        How: Create minimal pyproject.toml without build tool config
-        Why: Verify function doesn't crash with minimal configuration
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-version = "0.1.0"
-"""
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert paths == []
-
-    def test_handles_single_file_packages_at_root(self, mock_repo_path: Path) -> None:
-        """Test handles packages at repository root correctly.
-
-        Tests: get_source_paths_from_pyproject() root package detection
-        How: Create pyproject.toml with package at root (no parent directory)
-        Why: Verify single-file packages at root return repo path
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-
-[tool.hatch.build.targets.wheel]
-packages = ["mypackage"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path
-
-    def test_prioritizes_hatch_sources_over_packages(self, mock_repo_path: Path) -> None:
-        """Test prioritizes sources mapping over packages list when both present.
-
-        Tests: get_source_paths_from_pyproject() priority logic
-        How: Create pyproject.toml with both sources and packages
-        Why: Verify sources takes precedence per expected behavior
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-
-[tool.hatch.build.targets.wheel]
-sources = {"lib/mypackage" = "mypackage"}
-packages = ["src/otherpackage"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "lib"
-
-    def test_prioritizes_hatch_over_setuptools(self, mock_repo_path: Path) -> None:
-        """Test prioritizes Hatch configuration over setuptools when both present.
-
-        Tests: get_source_paths_from_pyproject() priority logic
-        How: Create pyproject.toml with both Hatch and setuptools config
-        Why: Verify Hatch takes precedence
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        pyproject_content = """[project]
-name = "test-project"
-
-[tool.hatch.build.targets.wheel]
-packages = ["hatch_src/mypackage"]
-
-[tool.setuptools.packages.find]
-where = ["setuptools_src"]
-"""
-        (mock_repo_path / "pyproject.toml").write_text(pyproject_content)
-
-        # Act
-        paths = get_source_paths_from_pyproject(mock_repo_path)
-
-        # Assert
-        assert len(paths) == 1
-        assert paths[0] == mock_repo_path / "hatch_src"
+        (mock_repo_path / "pyproject.toml").write_text(content)
+        assert not is_mkapidocs_in_target_env(mock_repo_path)

@@ -10,9 +10,10 @@ import sys
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from mkapidocs.models import PyprojectConfig
 from pytest_mock import MockerFixture
 
 
@@ -42,7 +43,7 @@ def mkapidocs_module() -> ModuleType:
     # Register as "mkapidocs" for backward compatibility with tests
     sys.modules["mkapidocs"] = mkapidocs_cli
 
-    return mkapidocs_cli
+    return sys.modules["mkapidocs"]
 
 
 @pytest.fixture
@@ -95,7 +96,7 @@ build-backend = "hatchling.build"
 
 
 @pytest.fixture
-def mock_pyproject_with_typer(mock_repo_path: Path) -> dict[str, Any]:
+def mock_pyproject_with_typer(mock_repo_path: Path) -> PyprojectConfig:
     """Create pyproject.toml with Typer dependency and return parsed dict.
 
     Tests: Typer dependency detection
@@ -125,11 +126,12 @@ build-backend = "hatchling.build"
     pyproject_path.write_text(pyproject_content)
 
     with open(pyproject_path, "rb") as f:
-        return tomllib.load(f)
+        data = tomllib.load(f)
+    return PyprojectConfig.from_dict(data)
 
 
 @pytest.fixture
-def mock_pyproject_with_private_registry(mock_repo_path: Path) -> dict[str, Any]:
+def mock_pyproject_with_private_registry(mock_repo_path: Path) -> PyprojectConfig:
     """Create pyproject.toml with private registry configuration.
 
     Tests: Private registry detection
@@ -162,7 +164,8 @@ build-backend = "hatchling.build"
     pyproject_path.write_text(pyproject_content)
 
     with open(pyproject_path, "rb") as f:
-        return tomllib.load(f)
+        data = tomllib.load(f)
+    return PyprojectConfig.from_dict(data)
 
 
 @pytest.fixture
@@ -233,7 +236,7 @@ void helper_function();
 
 
 @pytest.fixture
-def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]) -> Path:
+def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]) -> Path:  # pyright: ignore[reportExplicitAny]
     """Create mock repository with Typer CLI application.
 
     Tests: Typer CLI module detection
@@ -275,7 +278,7 @@ if __name__ == "__main__":
 
 
 @pytest.fixture
-def parsed_pyproject() -> dict[str, Any]:
+def parsed_pyproject() -> PyprojectConfig:
     """Provide minimal parsed pyproject.toml dictionary.
 
     Tests: Functions that accept parsed pyproject dict as input
@@ -285,7 +288,8 @@ def parsed_pyproject() -> dict[str, Any]:
     Returns:
         Minimal pyproject.toml configuration dictionary
     """
-    return {
+    data = {  # pyright: ignore[reportUnknownVariableType]
         "project": {"name": "test-project", "version": "0.1.0", "description": "Test project", "dependencies": []},
         "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
     }
+    return PyprojectConfig.from_dict(cast(dict[str, Any], data))  # pyright: ignore[reportExplicitAny]

@@ -12,12 +12,11 @@ authors = [{ name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com" }]
 dependencies = [
     "typer>=0.19.2",
     "jinja2>=3.1.6",
-    "tomli-w>=1.2.0",
+    "tomlkit>=0.12.0",
     "python-dotenv>=1.1.1",
     "pydantic>=2.12.2",
-    "rich>=13.9.4",
     "httpx>=0.28.1",
-    "pyyaml>=6.0",
+    "ruamel.yaml>=0.18.0",
     "mkdocs>=1.6.0",
     "mkdocs-material>=9.5.0",
     "mkdocs-gen-files>=0.5.0",
@@ -27,6 +26,21 @@ dependencies = [
     "mkdoxy>=1.2.3",
     "mkdocs-mermaid2-plugin>=1.1.1",
     "termynal>=0.12.1",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pre-commit>=4.3.0",
+    "basedpyright>=1.21.1",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.14.2",
+    "python-semantic-release>=9.0.0",
+    "pep723-loader>=0.6.0",
+    "mkapidocs @ file:///home/ubuntulinuxqa2/repos/mkapidocs",
+    "hatchling>=1.28.0",
 ]
 
 [project.license]
@@ -80,6 +94,7 @@ ignore = [
     "COM819",
     "D107",
     "D415",
+    "DOC501",
     "E111",
     "E117",
     "E203",
@@ -91,10 +106,17 @@ ignore = [
     "Q001",
     "Q002",
     "Q003",
-    "TRY003",
-    "DOC501",
-    "DOC502",
+    "S202",
+    "S404",
+    "S506",
+    "S603",
     "T201",
+    "TRY003",
+    "S404",   # subprocess module import is needed for system integration
+    "S603",   # subprocess calls are to known executables (git, uv, mkdocs)
+    "S701",   # Jinja2 autoescape not needed for YAML/Markdown generation
+    "S202",   # tarfile.extractall is used with trusted Doxygen releases
+    "DOC502", # docstring raise clauses may reference potential raises from callees
 ]
 unfixable = ["F401", "DOC501"]
 select = ["DOC", "D"]
@@ -120,20 +142,8 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = ["S101", "S603", "S607", "D102", "D200", "D100"]
 "**/test_*.py" = ["S101", "S603", "S607", "D102", "D200", "D100"]
-# CLI tool has legitimate subprocess usage and acceptable complexity
-"packages/mkapidocs/cli.py" = [
-    "S404",   # subprocess module import is needed for system integration
-    "S603",   # subprocess calls are to known executables (git, uv, mkdocs)
-    "S701",   # Jinja2 autoescape not needed for YAML/Markdown generation
-    "S202",   # tarfile.extractall is used with trusted Doxygen releases
-    "DOC502", # docstring raise clauses may reference potential raises from callees
-    "SIM102", # nested ifs improve readability for complex conditions with comments
-    "SIM117", # nested withs clarify resource lifecycle in httpx streaming
-]
 # Generated documentation script - minimal typing, not production code
-"docs/generated/gen_ref_pages.py" = [
-    "D100", # module docstring present
-]
+
 
 [tool.mypy]
 python_version = "3.11"
@@ -152,6 +162,7 @@ reportUnusedParameter = false
 reportAny = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
+reportPrivateUsage = false
 
 [tool.pytest.ini_options]
 addopts = ["--cov=packages/mkapidocs", "--cov-report=term-missing", "-v"]
@@ -209,25 +220,3 @@ newline_sequence = "\n"
 keep_trailing_newline = false
 extensions = []
 autoescape = true
-
-[dependency-groups]
-dev = [
-    "mypy>=1.18.2",
-    "pre-commit>=4.3.0",
-    "basedpyright>=1.21.1",
-    "pytest>=8.4.2",
-    "pytest-cov>=7.0.0",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.14.2",
-    "types-pyyaml>=6.0",
-    "python-semantic-release>=9.0.0",
-    "typer>=0.19.2",
-    "jinja2>=3.1.6",
-    "tomli-w>=1.2.0",
-    "python-dotenv>=1.1.1",
-    "pydantic>=2.12.2",
-    "rich>=13.9.4",
-    "httpx>=0.28.1",
-    "pyyaml>=6.0",
-    "mkapidocs @ file:///home/ubuntulinuxqa2/repos/mkapidocs",
-]

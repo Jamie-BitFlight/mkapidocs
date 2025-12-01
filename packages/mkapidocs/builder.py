@@ -2,85 +2,20 @@
 
 from __future__ import annotations
 
-import importlib.resources
 import os
-import subprocess  # noqa: S404 - subprocess is required for running mkdocs/uv commands
-import tomllib
+import subprocess
+from importlib.resources import files
 from pathlib import Path
 from shutil import which
 from typing import cast
 
+import tomlkit
 from rich.console import Console
-
-from mkapidocs import resources
 
 # Initialize Rich console
 console = Console()
-
-
-def _get_nested_dict(data: dict[str, object], *keys: str) -> dict[str, object]:
-    """Safely navigate nested dictionaries with type safety.
-
-    Args:
-        data: Root dictionary.
-        *keys: Sequence of keys to navigate.
-
-    Returns:
-        The nested dictionary at the specified path, or empty dict if not found.
-    """
-    result: dict[str, object] = data
-    for key in keys:
-        value = result.get(key)
-        if isinstance(value, dict):
-            # Cast to known type to avoid unknown type propagation from isinstance narrowing
-            typed_dict = cast(dict[str, object], value)
-            result = typed_dict
-        else:
-            return {}
-    return result
-
-
-def _get_list_from_dict(data: dict[str, object], key: str, default: list[str] | None = None) -> list[str]:
-    """Safely get a list of strings from a dictionary.
-
-    Args:
-        data: Dictionary to extract from.
-        key: Key to look up.
-        default: Default value if key not found or not a list.
-
-    Returns:
-        List of strings, or default/empty list if not found.
-    """
-    if default is None:
-        default = []
-    value = data.get(key)
-    if isinstance(value, list):
-        # Cast to known type and filter to strings
-        typed_list = cast(list[object], value)
-        result: list[str] = []
-        for item in typed_list:
-            if isinstance(item, str):
-                result.append(item)
-        return result
-    return default
-
-
-def _get_dict_keys(data: dict[str, object], key: str) -> list[str]:
-    """Safely get keys from a nested dictionary.
-
-    Args:
-        data: Dictionary to extract from.
-        key: Key whose value should be a dict.
-
-    Returns:
-        List of keys from the nested dict, or empty list if not a dict.
-    """
-    value = data.get(key)
-    if isinstance(value, dict):
-        # Cast to known type to avoid unknown type propagation
-        typed_dict = cast(dict[str, object], value)
-        return list(typed_dict.keys())
-    return []
+MKDOCS_FILE = "mkdocs.yml"
+CMD_LIST_TYPE = list[str | Path] | list[str]
 
 
 def is_mkapidocs_in_target_env(repo_path: Path) -> bool:
@@ -97,8 +32,8 @@ def is_mkapidocs_in_target_env(repo_path: Path) -> bool:
         return False
 
     try:
-        with open(pyproject_path, "rb") as f:
-            config: dict[str, object] = tomllib.load(f)
+        with open(pyproject_path, encoding="utf-8") as f:
+            config = tomlkit.load(f)
 
         dependency_groups = config.get("dependency-groups")
         if not isinstance(dependency_groups, dict):
@@ -128,7 +63,7 @@ def is_running_in_target_env() -> bool:
     return os.environ.get("MKAPIDOCS_INTERNAL_CALL") == "1"
 
 
-def _run_subprocess(cmd: list[str], cwd: Path, env: dict[str, str]) -> int:
+def _run_subprocess(cmd: list[str | Path], cwd: Path, env: dict[str, str]) -> int:
     """Run a subprocess and return its exit code.
 
     Args:
@@ -139,11 +74,11 @@ def _run_subprocess(cmd: list[str], cwd: Path, env: dict[str, str]) -> int:
     Returns:
         Exit code from the subprocess.
     """
-    result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=False, check=False)  # noqa: S603
+    result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=False, check=False)
     return result.returncode
 
 
-def _run_subprocess_with_interrupt(cmd: list[str], cwd: Path, env: dict[str, str]) -> int:
+def _run_subprocess_with_interrupt(cmd: list[str | Path], cwd: Path, env: dict[str, str]) -> int:
     """Run a subprocess with KeyboardInterrupt handling.
 
     Args:
@@ -155,7 +90,7 @@ def _run_subprocess_with_interrupt(cmd: list[str], cwd: Path, env: dict[str, str
         Exit code from the subprocess, or 0 if interrupted.
     """
     try:
-        result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=False, check=False)  # noqa: S603
+        result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=False, check=False)
     except KeyboardInterrupt:
         return 0
     else:
@@ -178,7 +113,6 @@ def _get_mkdocs_plugins() -> list[str]:
         "mkdoxy",
         "mkdocs-mermaid2-plugin",
         "termynal",
-        "mkdocs-recently-updated-docs",
     ]
 
 
@@ -200,17 +134,17 @@ def build_docs(target_path: Path, strict: bool = False, output_dir: Path | None 
     Raises:
         FileNotFoundError: If mkdocs.yml not found.
     """
-    mkdocs_yml = target_path / "mkdocs.yml"
+    mkdocs_yml = target_path / MKDOCS_FILE
     if not mkdocs_yml.exists():
-        msg = f"mkdocs.yml not found in {target_path}"
+        msg = f"{MKDOCS_FILE} not found in {target_path}"
         raise FileNotFoundError(msg)
 
     # Generate gen_ref_pages.py just-in-time for this build
     gen_ref_script = target_path / "docs" / "generated" / "gen_ref_pages.py"
     gen_ref_script.parent.mkdir(parents=True, exist_ok=True)
 
-    # Read script content from resources
-    script_content = importlib.resources.read_text(resources, "gen_ref_pages.py")
+    # Read script content from resources using modern files() API
+    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
 
     _ = gen_ref_script.write_text(script_content)
 
@@ -248,13 +182,12 @@ def _build_with_target_env(target_path: Path, env: dict[str, str], strict: bool,
     """
     console.print("[blue]:rocket: Using target project's environment for build[/blue]")
 
-    uv_cmd = which("uv")
-    if not uv_cmd:
+    if not (uv_cmd := which("uv")):
         msg = "uv command not found. Please install uv."
         raise FileNotFoundError(msg)
 
     env["MKAPIDOCS_INTERNAL_CALL"] = "1"
-    cmd = [uv_cmd, "run", "mkapidocs", "build", "."]
+    cmd: CMD_LIST_TYPE = [uv_cmd, "run", "mkapidocs", "build", "."]
     if strict:
         cmd.append("--strict")
     if output_dir:
@@ -278,9 +211,8 @@ def _build_with_mkdocs_direct(
         Exit code from build, or None if mkdocs not found.
     """
     console.print("[blue]:zap: Running mkdocs directly (already in target environment)[/blue]")
-    mkdocs_cmd = which("mkdocs")
-    if mkdocs_cmd:
-        cmd = [mkdocs_cmd, "build"]
+    if mkdocs_cmd := which("mkdocs"):
+        cmd: CMD_LIST_TYPE = [mkdocs_cmd, "build"]
         if strict:
             cmd.append("--strict")
         if output_dir:
@@ -306,12 +238,11 @@ def _build_with_uvx(target_path: Path, env: dict[str, str], strict: bool, output
     """
     console.print("[blue]:wrench: Using standalone uvx environment for build[/blue]")
 
-    uvx_cmd = which("uvx")
-    if not uvx_cmd:
+    if not (uvx_cmd := which("uvx")):
         msg = "uvx command not found. Please install uv."
         raise FileNotFoundError(msg)
 
-    cmd = [uvx_cmd]
+    cmd: CMD_LIST_TYPE = [uvx_cmd]
     for plugin in _get_mkdocs_plugins():
         cmd.extend(["--with", plugin])
     cmd.extend(["--from", "mkdocs", "mkdocs", "build"])
@@ -342,17 +273,17 @@ def serve_docs(target_path: Path, host: str = "127.0.0.1", port: int = 8000) -> 
     Raises:
         FileNotFoundError: If mkdocs.yml not found.
     """
-    mkdocs_yml = target_path / "mkdocs.yml"
+    mkdocs_yml = target_path / MKDOCS_FILE
     if not mkdocs_yml.exists():
-        msg = f"mkdocs.yml not found in {target_path}"
+        msg = f"{MKDOCS_FILE} not found in {target_path}"
         raise FileNotFoundError(msg)
 
     # Generate gen_ref_pages.py just-in-time for serving
     gen_ref_script = target_path / "docs" / "generated" / "gen_ref_pages.py"
     gen_ref_script.parent.mkdir(parents=True, exist_ok=True)
 
-    # Read script content from resources
-    script_content = importlib.resources.read_text(resources, "gen_ref_pages.py")
+    # Read script content from resources using modern files() API
+    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
 
     _ = gen_ref_script.write_text(script_content)
 
@@ -390,13 +321,12 @@ def _serve_with_target_env(target_path: Path, env: dict[str, str], host: str, po
     """
     console.print("[blue]:rocket: Using target project's environment for serve[/blue]")
 
-    uv_cmd = which("uv")
-    if not uv_cmd:
+    if not (uv_cmd := which("uv")):
         msg = "uv command not found. Please install uv."
         raise FileNotFoundError(msg)
 
     env["MKAPIDOCS_INTERNAL_CALL"] = "1"
-    cmd = [uv_cmd, "run", "mkapidocs", "serve", ".", "--host", host, "--port", str(port)]
+    cmd: CMD_LIST_TYPE = [uv_cmd, "run", "mkapidocs", "serve", ".", "--host", host, "--port", str(port)]
 
     return _run_subprocess_with_interrupt(cmd, target_path, env)
 
@@ -414,9 +344,8 @@ def _serve_with_mkdocs_direct(target_path: Path, env: dict[str, str], host: str,
         Exit code from serve, or None if mkdocs not found.
     """
     console.print("[blue]:zap: Running mkdocs directly (already in target environment)[/blue]")
-    mkdocs_cmd = which("mkdocs")
-    if mkdocs_cmd:
-        cmd = [mkdocs_cmd, "serve", "--dev-addr", f"{host}:{port}"]
+    if mkdocs_cmd := which("mkdocs"):
+        cmd: list[str | Path] = [mkdocs_cmd, "serve", "--dev-addr", f"{host}:{port}"]
         return _run_subprocess_with_interrupt(cmd, target_path, env)
     return None
 
@@ -438,12 +367,11 @@ def _serve_with_uvx(target_path: Path, env: dict[str, str], host: str, port: int
     """
     console.print("[blue]:wrench: Using standalone uvx environment for serve[/blue]")
 
-    uvx_cmd = which("uvx")
-    if not uvx_cmd:
+    if not (uvx_cmd := which("uvx")):
         msg = "uvx command not found. Please install uv."
         raise FileNotFoundError(msg)
 
-    cmd = [uvx_cmd]
+    cmd: CMD_LIST_TYPE = [uvx_cmd]
     for plugin in _get_mkdocs_plugins():
         cmd.extend(["--with", plugin])
     cmd.extend(["--from", "mkdocs", "mkdocs", "serve", "--dev-addr", f"{host}:{port}"])

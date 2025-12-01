@@ -1,0 +1,104 @@
+site_name: {{ project_name }}
+site_url: {{ site_url }}
+{% if ci_provider == 'gitlab' %}
+site_dir: public
+{% else %}
+site_dir: site
+{% endif %}
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/generated/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            members_order: source
+{% if has_typer %}
+  - mkdocs-typer2
+{% endif %}
+{% if c_source_dirs %}
+  - mkdoxy:
+      projects:
+        {{ project_name }}:
+          src-dirs: {{ c_source_dirs | join(' ') }}
+          full-doc: True
+          doxy-cfg:
+            FILE_PATTERNS: "*.c *.h *.cpp *.hpp"
+            RECURSIVE: True
+            EXTRACT_ALL: True
+{% endif %}
+  - mermaid2
+  - termynal
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - About: about.md
+  - Getting Started:
+    - Installation: install.md
+  - API Reference:
+    - Python API: generated/python-api.md
+{% if c_source_dirs %}
+    - C API: generated/c-api.md
+{% endif %}
+{% if has_typer %}
+{% if cli_modules|length == 1 %}
+    - CLI Reference: generated/{{ cli_modules[0].filename }}
+{% else %}
+    - CLI Reference:
+{% for cli_item in cli_modules %}
+      - {{ cli_item.display_name }}: generated/{{ cli_item.filename }}
+{% endfor %}
+{% endif %}
+{% endif %}
+  - Repository Files: repository/SUMMARY.md

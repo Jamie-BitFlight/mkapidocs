@@ -66,7 +66,10 @@ mkapidocs info
 Initialize or update documentation for a Python project:
 
 ```bash
-# Auto-detect CI provider from git remote or filesystem
+# Auto-detect CI provider from git remote or filesystem (current directory)
+mkapidocs setup
+
+# Specify a path explicitly
 mkapidocs setup /path/to/your/project
 
 # Explicitly use GitHub Actions
@@ -88,8 +91,8 @@ Example with real paths:
 # Setup docs for a project in your home directory
 mkapidocs setup ~/repos/my-python-project
 
-# Setup docs for a project in the current directory
-mkapidocs setup .
+# Setup docs for a project in the current directory (default)
+mkapidocs setup
 
 # Setup docs with explicit provider
 mkapidocs setup ~/repos/my-project --provider gitlab
@@ -133,8 +136,8 @@ mkapidocs build /path/to/your/project --output-dir /path/to/output
 Example:
 
 ```bash
-# Build docs for project in current directory
-mkapidocs build .
+# Build docs for project in current directory (default)
+mkapidocs build
 
 # Build docs with strict checking
 mkapidocs build ~/repos/my-project --strict
@@ -158,8 +161,8 @@ mkapidocs serve /path/to/your/project --host 0.0.0.0 --port 8080
 Example:
 
 ```bash
-# Serve docs locally
-mkapidocs serve ~/repos/my-project
+# Serve docs locally (current directory)
+mkapidocs serve
 
 # Access at http://127.0.0.1:8000
 # Press Ctrl+C to stop
@@ -212,7 +215,9 @@ your-project/
     └── workflows/
         └── pages.yml                   # GitHub Pages workflow
 # OR
-└── .gitlab-ci.yml                      # For GitLab provider (pages job added)
+└── .gitlab/                            # For GitLab provider
+    └── workflows/
+        └── pages.gitlab-ci.yml         # GitLab Pages workflow
 ```
 
 **Preserved on re-run:** `index.md`, `install.md`, and user customizations in `mkdocs.yml`
@@ -251,7 +256,6 @@ The script configures MkDocs with:
 - **mkdoxy**: C/C++ Doxygen documentation (if detected)
 - **mermaid2**: Mermaid diagrams
 - **termynal**: Terminal animations
-- **recently-updated**: Show recently updated pages
 
 ## Complete Workflow Example
 
@@ -261,14 +265,14 @@ cd ~/repos/my-awesome-project
 uv add --dev mkapidocs
 
 # 2. Setup documentation
-uv run mkapidocs setup .
+uv run mkapidocs setup
 
 # 3. Preview locally
-uv run mkapidocs serve .
+uv run mkapidocs serve
 # Visit http://127.0.0.1:8000
 
 # 4. Build for production
-uv run mkapidocs build . --strict
+uv run mkapidocs build --strict
 
 # 5. Commit and push (CI will auto-deploy)
 git add .
@@ -343,13 +347,15 @@ The documentation will be available at: `https://your-username.github.io/repo-na
 
 ### GitLab Pages
 
-After running setup with GitLab provider and pushing to GitLab, the `pages` job in `.gitlab-ci.yml` will:
+After running setup with GitLab provider and pushing to GitLab, the `pages` job in `.gitlab/workflows/pages.gitlab-ci.yml` will:
 
-1. Set up Python environment with uv
-2. Run `mkapidocs build . --strict`
+1. Use the `ghcr.io/astral-sh/uv:python3.11` image
+2. Run `uv run mkapidocs build . --strict`
 3. Deploy the public/ directory to GitLab Pages
 
 The documentation will be available at: `https://your-username.gitlab.io/repo-name/`
+
+**Note:** If you already have a `pages` job in your root `.gitlab-ci.yml`, mkapidocs will skip creating a new workflow and warn you to update your existing job.
 
 ## Customization
 

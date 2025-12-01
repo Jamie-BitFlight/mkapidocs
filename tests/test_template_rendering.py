@@ -11,47 +11,19 @@ Tests cover:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-import yaml
-
-
-# Access mkapidocs module from sys.modules (loaded by session-scoped fixture in conftest.py)
-def get_ci_provider():  # type: ignore[no-untyped-def]
-    """Get CIProvider enum from mkapidocs module."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].CIProvider
-
-
-# Access mkapidocs module from sys.modules (loaded by session-scoped fixture in conftest.py)
-def create_mkdocs_config(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_mkdocs_config with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_mkdocs_config(*args, **kwargs)
-
-
-def create_github_actions(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_github_actions with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_github_actions(*args, **kwargs)
-
-
-def create_index_page(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_index_page with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_index_page(*args, **kwargs)
-
-
-def create_api_reference(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_api_reference with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_api_reference(*args, **kwargs)
-
-
-def create_gen_files_script(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_gen_files_script with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_gen_files_script(*args, **kwargs)
-
-
-def create_generated_content(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.create_generated_content with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].create_generated_content(*args, **kwargs)
+from mkapidocs.generator import (
+    create_api_reference,
+    create_gen_files_script,
+    create_generated_content,
+    create_github_actions,
+    create_index_page,
+    create_mkdocs_config,
+    update_gitignore,
+)
+from mkapidocs.models import CIProvider
+from ruamel.yaml import YAML
 
 
 class TestCreateMkdocsConfig:
@@ -82,7 +54,7 @@ class TestCreateMkdocsConfig:
             site_url=site_url,
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -113,7 +85,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -127,7 +99,6 @@ class TestCreateMkdocsConfig:
         assert "mkdocstrings" in rendered_content
         assert "mermaid2" in rendered_content
         assert "termynal" in rendered_content
-        assert "recently-updated" in rendered_content
 
     def test_adds_typer_plugin_when_detected(self, mock_repo_path: Path) -> None:
         """Test mkdocs.yml includes mkdocs-typer2 plugin when Typer detected.
@@ -146,7 +117,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[],
             has_typer=True,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -172,7 +143,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -198,7 +169,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[mock_repo_path / "source"],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -225,7 +196,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -251,7 +222,7 @@ class TestCreateMkdocsConfig:
             site_url="https://example.com/",
             c_source_dirs=[mock_repo_path / "source"],
             has_typer=True,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -302,7 +273,7 @@ nav:
             site_url="https://new-url.com/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert - Verify merge behavior
@@ -334,7 +305,7 @@ nav:
             site_url="https://example.github.io/project/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITHUB,
+            ci_provider=CIProvider.GITHUB,
         )
 
         # Assert
@@ -360,7 +331,7 @@ nav:
             site_url="https://example.gitlab.io/project/",
             c_source_dirs=[],
             has_typer=False,
-            ci_provider=get_ci_provider().GITLAB,
+            ci_provider=CIProvider.GITLAB,
         )
 
         # Assert
@@ -410,7 +381,9 @@ class TestCreateGitHubActions:
         # Assert
         workflow_path = mock_repo_path / ".github" / "workflows" / "pages.yml"
         workflow_content = workflow_path.read_text()
-        parsed_yaml = yaml.safe_load(workflow_content)
+        yaml_parser = YAML()
+        parsed_yaml = yaml_parser.load(workflow_content)
+        assert isinstance(parsed_yaml, dict)
 
         assert parsed_yaml["name"] == "Deploy Documentation"
         assert "on" in parsed_yaml
@@ -431,10 +404,14 @@ class TestCreateGitHubActions:
 
         # Assert
         workflow_path = mock_repo_path / ".github" / "workflows" / "pages.yml"
-        parsed_yaml = yaml.safe_load(workflow_path.read_text())
+        yaml_parser = YAML()
+        parsed_yaml = yaml_parser.load(workflow_path.read_text())
+        assert isinstance(parsed_yaml, dict)
+        jobs = parsed_yaml["jobs"]
+        assert isinstance(jobs, dict)
 
-        assert "build" in parsed_yaml["jobs"]
-        assert "deploy" in parsed_yaml["jobs"]
+        assert "build" in jobs
+        assert "deploy" in jobs
 
     def test_workflow_uses_local_script_command(self, mock_repo_path: Path) -> None:
         """Test GitHub Actions workflow uses local script to run mkapidocs.
@@ -453,7 +430,7 @@ class TestCreateGitHubActions:
         workflow_path = mock_repo_path / ".github" / "workflows" / "pages.yml"
         workflow_content = workflow_path.read_text()
 
-        assert "./mkapidocs.py build . --strict" in workflow_content
+        assert "uv run mkapidocs build . --strict" in workflow_content
 
     def test_workflow_overwrites_existing_file(self, mock_repo_path: Path) -> None:
         """Test GitHub Actions workflow overwrites existing file.
@@ -934,15 +911,12 @@ class TestCreateGeneratedContent:
         assert "C API Reference" in content
         assert "c-api.md" in content
 
-    def test_creates_install_registry_snippet(self, mock_repo_path: Path) -> None:
-        """Test install-registry.md snippet creation.
+    def test_creates_install_command_snippet(self, mock_repo_path: Path) -> None:
+        """Test install-command.md snippet creation.
 
-        Tests: create_generated_content() creates install-registry.md
+        Tests: create_generated_content() creates install-command.md
         How: Call function, verify file exists
-        Why: Registry-specific install instructions are dynamically generated
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Why: Install instructions are dynamically generated
         """
         # Arrange & Act
         create_generated_content(
@@ -955,18 +929,15 @@ class TestCreateGeneratedContent:
         )
 
         # Assert
-        registry_path = mock_repo_path / "docs" / "generated" / "install-registry.md"
-        assert registry_path.exists()
+        command_path = mock_repo_path / "docs" / "generated" / "install-command.md"
+        assert command_path.exists()
 
-    def test_registry_snippet_includes_install_command_when_private(self, mock_repo_path: Path) -> None:
-        """Test registry snippet includes install command for private registry.
+    def test_install_command_snippet_includes_private_registry_command(self, mock_repo_path: Path) -> None:
+        """Test install command snippet includes private registry flag.
 
         Tests: Private registry install instructions
         How: Set has_private_registry=True with URL, verify install command
         Why: Users need specific install command for private registries
-
-        Args:
-            mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
         create_generated_content(
@@ -979,21 +950,19 @@ class TestCreateGeneratedContent:
         )
 
         # Assert
-        registry_path = mock_repo_path / "docs" / "generated" / "install-registry.md"
-        content = registry_path.read_text()
+        command_path = mock_repo_path / "docs" / "generated" / "install-command.md"
+        content = command_path.read_text()
 
-        assert "uv pip install private-project" in content
-        assert "https://private.pypi.org/simple" in content
+        assert "uv add" in content
+        assert '--index="https://private.pypi.org/simple"' in content
+        assert "private-project" in content
 
-    def test_registry_snippet_empty_when_no_private_registry(self, mock_repo_path: Path) -> None:
-        """Test registry snippet is empty when no private registry.
+    def test_install_command_snippet_includes_standard_command(self, mock_repo_path: Path) -> None:
+        """Test install command snippet includes standard command when no private registry.
 
-        Tests: Conditional registry content exclusion
-        How: Set has_private_registry=False, verify empty content
-        Why: Public packages don't need registry-specific instructions
-
-        Args:
-            mock_repo_path: Temporary repository directory
+        Tests: Standard install instructions
+        How: Set has_private_registry=False, verify standard command
+        Why: Public packages use standard install command
         """
         # Arrange & Act
         create_generated_content(
@@ -1006,15 +975,11 @@ class TestCreateGeneratedContent:
         )
 
         # Assert
-        registry_path = mock_repo_path / "docs" / "generated" / "install-registry.md"
-        content = registry_path.read_text()
+        command_path = mock_repo_path / "docs" / "generated" / "install-command.md"
+        content = command_path.read_text()
 
-        assert content.strip() == ""
-
-
-def update_gitignore(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.update_gitignore with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].update_gitignore(*args, **kwargs)
+        assert "uv add public-project" in content
+        assert "--index" not in content
 
 
 class TestUpdateGitignore:
@@ -1023,7 +988,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_github_creates_new_file(self, tmp_path: Path) -> None:
         """Test creating new .gitignore with GitHub provider."""
         # Arrange
-        CIProvider = get_ci_provider()
 
         # Act
         update_gitignore(tmp_path, CIProvider.GITHUB)
@@ -1039,7 +1003,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_gitlab_creates_new_file(self, tmp_path: Path) -> None:
         """Test creating new .gitignore with GitLab provider."""
         # Arrange
-        CIProvider = get_ci_provider()
 
         # Act
         update_gitignore(tmp_path, CIProvider.GITLAB)
@@ -1055,7 +1018,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_github_appends_to_existing(self, tmp_path: Path) -> None:
         """Test appending to existing .gitignore with GitHub provider."""
         # Arrange
-        CIProvider = get_ci_provider()
         gitignore_path = tmp_path / ".gitignore"
         gitignore_path.write_text("# Existing content\n*.pyc\n__pycache__/\n")
 
@@ -1073,7 +1035,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_gitlab_appends_to_existing(self, tmp_path: Path) -> None:
         """Test appending to existing .gitignore with GitLab provider."""
         # Arrange
-        CIProvider = get_ci_provider()
         gitignore_path = tmp_path / ".gitignore"
         gitignore_path.write_text("# Existing content\n*.pyc\n__pycache__/\n")
 
@@ -1091,7 +1052,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_github_skips_duplicate_entries(self, tmp_path: Path) -> None:
         """Test that GitHub entries are not duplicated if already present."""
         # Arrange
-        CIProvider = get_ci_provider()
         gitignore_path = tmp_path / ".gitignore"
         gitignore_path.write_text("# MkDocs documentation\n/site/\n.mkdocs_cache/\n")
 
@@ -1107,7 +1067,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_gitlab_skips_duplicate_entries(self, tmp_path: Path) -> None:
         """Test that GitLab entries are not duplicated if already present."""
         # Arrange
-        CIProvider = get_ci_provider()
         gitignore_path = tmp_path / ".gitignore"
         gitignore_path.write_text("# MkDocs documentation\n/public/\n.mkdocs_cache/\n")
 
@@ -1123,7 +1082,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_includes_generated_when_requested(self, tmp_path: Path) -> None:
         """Test that docs/generated/ is added when include_generated=True."""
         # Arrange
-        CIProvider = get_ci_provider()
 
         # Act
         update_gitignore(tmp_path, CIProvider.GITHUB, include_generated=True)
@@ -1138,7 +1096,6 @@ class TestUpdateGitignore:
     def test_update_gitignore_excludes_generated_by_default(self, tmp_path: Path) -> None:
         """Test that docs/generated/ is not added by default."""
         # Arrange
-        CIProvider = get_ci_provider()
 
         # Act
         update_gitignore(tmp_path, CIProvider.GITLAB)

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import os
 import platform
-import subprocess  # noqa: S404
+import subprocess
 import tarfile
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import ClassVar, TypedDict, cast
 
 import httpx
+import tomlkit
 from rich import box
 from rich.console import Console
 from rich.measure import Measurement
@@ -76,7 +76,7 @@ class DoxygenInstaller:
             return False, None
 
         try:
-            result = subprocess.run([doxygen_path, "--version"], capture_output=True, text=True, check=True, timeout=5)  # noqa: S603
+            result = subprocess.run([doxygen_path, "--version"], capture_output=True, text=True, check=True, timeout=5)
         except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
             return False, None
         else:
@@ -194,7 +194,7 @@ class DoxygenInstaller:
             console.print(f"[blue]Extracting {tarball_path.name}...[/blue]")
             with tarfile.open(tarball_path, "r:gz") as tar:
                 # S202: Trusted source (GitHub release), ignoring Zip Slip warning
-                tar.extractall(extract_dir)  # noqa: S202
+                tar.extractall(extract_dir)
 
             # Find doxygen binary in extracted files
             doxygen_bin = None
@@ -250,7 +250,7 @@ class SystemValidator:
             return ValidationResult(check_name=name, passed=False, message=install_msg, required=True)
 
         try:
-            result = subprocess.run([path, version_arg], capture_output=True, text=True, check=True, timeout=5)  # noqa: S603
+            result = subprocess.run([path, version_arg], capture_output=True, text=True, check=True, timeout=5)
             version = result.stdout.strip()
             if strip_prefix and version.startswith(strip_prefix):
                 version = version[len(strip_prefix) :]
@@ -370,8 +370,8 @@ class ProjectValidator:
 
         # Try to parse it
         try:
-            with open(pyproject_path, "rb") as f:
-                _ = tomllib.load(f)
+            with open(pyproject_path, encoding="utf-8") as f:
+                _ = tomlkit.load(f)
             return ValidationResult(check_name="pyproject.toml", passed=True, message="Valid TOML file", required=True)
         except Exception as e:
             return ValidationResult(

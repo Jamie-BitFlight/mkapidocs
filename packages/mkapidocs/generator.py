@@ -3,22 +3,32 @@
 from __future__ import annotations
 
 import ast
-import importlib.resources
 import os
 import re
 import subprocess
-import tomllib
+from contextlib import suppress
+from importlib.resources import files
 from pathlib import Path
 from shutil import which
 from typing import cast
 
-import tomli_w
-import yaml
+import tomlkit
 from jinja2 import Environment
 from rich.console import Console
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
+from tomlkit import exceptions
 
-from mkapidocs import resources
-from mkapidocs.models import CIProvider, MessageType, PyprojectConfig
+from mkapidocs.models import (
+    CIProvider,
+    GitLabCIConfig,
+    GitLabIncludeAdapter,
+    GitLabIncludeLocal,
+    MessageType,
+    PyprojectConfig,
+    TomlTable,
+    TomlValue,
+)
 from mkapidocs.templates import (
     C_API_MD_TEMPLATE,
     CLI_MD_TEMPLATE,
@@ -69,14 +79,15 @@ def get_git_remote_url(repo_path: Path) -> str | None:
 
     try:
         config_content = git_config_path.read_text(encoding="utf-8")
-        # Match lines like "url = <url>" with any leading whitespace
-        pattern = r"^\s*url =\s(.*)$"
-        for line in config_content.splitlines():
-            if match := re.match(pattern, line):
-                return match.group(1).strip()
-        return None
     except (OSError, UnicodeDecodeError):
         return None
+
+    # Match lines like "url = <url>" with any leading whitespace
+    pattern = r"^\s*url =\s(.*)$"
+    for line in config_content.splitlines():
+        if match := re.match(pattern, line):
+            return match.group(1).strip()
+    return None
 
 
 def convert_ssh_to_https(git_url: str) -> str:
@@ -88,8 +99,7 @@ def convert_ssh_to_https(git_url: str) -> str:
     Returns:
         HTTPS URL format.
     """
-    ssh_protocol_match = re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)(?:\.git)?$", git_url)
-    if ssh_protocol_match:
+    if ssh_protocol_match := re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)(?:\.git)?$", git_url):
         host = ssh_protocol_match.group(1)
         path = ssh_protocol_match.group(2)
         return f"https://{host}/{path}"
@@ -132,7 +142,14 @@ def _detect_url_base(repo_path: Path, domain: str, io_domain: str) -> str | None
 
 
 def detect_github_url_base(repo_path: Path) -> str | None:
-    """Detect GitHub Pages URL base from git remote."""
+    """Detect GitHub Pages URL base from git remote.
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        GitHub Pages URL base or None if not detected.
+    """
     return _detect_url_base(repo_path, "github.com", "github.io")
 
 
@@ -163,8 +180,7 @@ def detect_ci_provider(repo_path: Path) -> CIProvider | None:
         Detected CI provider or None if not detected.
     """
     # Strategy 1: Check git remote URL
-    remote_url = get_git_remote_url(repo_path)
-    if remote_url:
+    if remote_url := get_git_remote_url(repo_path):
         if re.search(r"\bgithub\b", remote_url):
             return CIProvider.GITHUB
         if re.search(r"\bgitlab\b", remote_url):
@@ -192,14 +208,18 @@ def ensure_mkapidocs_installed(repo_path: Path) -> None:
     Args:
         repo_path: Path to repository.
     """
+    if not (uv_cmd := which("uv")):
+        console.print("[yellow]uv not found. Skipping mkapidocs installation check.[/yellow]")
+        return
+
     try:
         # Check if installed
-        subprocess.run(["uv", "pip", "show", "mkapidocs"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run([uv_cmd, "pip", "show", "mkapidocs"], cwd=repo_path, check=True, capture_output=True)
     except subprocess.CalledProcessError:
         # Not installed, install it
         console.print("[yellow]mkapidocs not found in environment. Installing as dev dependency...[/yellow]")
         try:
-            subprocess.run(["uv", "add", "--dev", "mkapidocs"], cwd=repo_path, check=True)  # noqa: S607
+            subprocess.run([uv_cmd, "add", "--dev", "mkapidocs"], cwd=repo_path, check=True)
             console.print("[green]Successfully installed mkapidocs.[/green]")
         except subprocess.CalledProcessError:
             console.print("[red]Failed to install mkapidocs. Please install it manually.[/red]")
@@ -217,14 +237,14 @@ def read_pyproject(repo_path: Path) -> PyprojectConfig:
 
     Raises:
         FileNotFoundError: If pyproject.toml does not exist.
-        ValueError: If pyproject.toml is invalid or missing required fields.
+        FileNotFoundError: If pyproject.toml does not exist.
     """
     pyproject_path = repo_path / "pyproject.toml"
     if not pyproject_path.exists():
         raise FileNotFoundError(f"pyproject.toml not found in {repo_path}")
 
-    with open(pyproject_path, "rb") as f:
-        raw_data = tomllib.load(f)
+    with open(pyproject_path, encoding="utf-8") as f:
+        raw_data = tomlkit.load(f)
 
     return PyprojectConfig.from_dict(raw_data)
 
@@ -237,8 +257,8 @@ def write_pyproject(repo_path: Path, config: PyprojectConfig) -> None:
         config: Typed configuration to write.
     """
     pyproject_path = repo_path / "pyproject.toml"
-    with open(pyproject_path, "wb") as f:
-        tomli_w.dump(config.to_dict(), f)
+    with open(pyproject_path, "w", encoding="utf-8") as f:
+        tomlkit.dump(config.to_dict(), f)
 
 
 def _contains_c_files(dir_path: Path, c_extensions: set[str]) -> bool:
@@ -252,6 +272,118 @@ def _contains_c_files(dir_path: Path, c_extensions: set[str]) -> bool:
         True if directory contains at least one file with a C/C++ extension.
     """
     return any(file_path.suffix in c_extensions for file_path in dir_path.rglob("*"))
+
+
+def _detect_c_code_from_explicit(repo_path: Path, explicit_dirs: list[str], c_extensions: set[str]) -> list[Path]:
+    """Detect C code from explicit CLI arguments.
+
+    Args:
+        repo_path: Path to repository.
+        explicit_dirs: List of explicit directories.
+        c_extensions: Set of C extensions.
+
+    Returns:
+        List of detected directories.
+    """
+    found_dirs: list[Path] = []
+    for dir_str in explicit_dirs:
+        dir_path = (repo_path / dir_str).resolve()
+        if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
+            found_dirs.append(dir_path)
+    return found_dirs
+
+
+def _detect_c_code_from_env(repo_path: Path, env_dirs: str, c_extensions: set[str]) -> list[Path]:
+    """Detect C code from environment variable.
+
+    Args:
+        repo_path: Path to repository.
+        env_dirs: Environment variable value.
+        c_extensions: Set of C extensions.
+
+    Returns:
+        List of detected directories.
+    """
+    found_dirs: list[Path] = []
+    for dir_str in env_dirs.split(":"):
+        dir_path = (repo_path / dir_str.strip()).resolve()
+        if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
+            found_dirs.append(dir_path)
+    return found_dirs
+
+
+def _detect_c_code_from_config(repo_path: Path, pyproject: PyprojectConfig, c_extensions: set[str]) -> list[Path]:
+    """Detect C code from pypis_delivery_service config.
+
+    Args:
+        repo_path: Path to repository.
+        pyproject: Pyproject configuration.
+        c_extensions: Set of C extensions.
+
+    Returns:
+        List of detected directories.
+    """
+    cmake_source_dir = pyproject.cmake_source_dir
+    if not cmake_source_dir:
+        return []
+
+    dir_path = (repo_path / cmake_source_dir).resolve()
+    if not dir_path.exists():
+        console.print(
+            f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
+            + "does not exist, falling back to auto-detection[/yellow]"
+        )
+    elif not dir_path.is_dir():
+        console.print(
+            f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
+            + "is not a directory, falling back to auto-detection[/yellow]"
+        )
+    elif not _contains_c_files(dir_path, c_extensions):
+        console.print(
+            f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
+            + "contains no C/C++ files, falling back to auto-detection[/yellow]"
+        )
+    else:
+        # Valid directory with C files
+        return [dir_path]
+    return []
+
+
+def _detect_c_code_from_git(repo_path: Path, c_extensions: set[str]) -> list[Path]:
+    """Detect C code via git ls-files.
+
+    Args:
+        repo_path: Path to repository.
+        c_extensions: Set of C extensions.
+
+    Returns:
+        List of detected directories.
+    """
+    if not (git_cmd := which("git")):
+        return []
+
+    with suppress(subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        result = subprocess.run(
+            [git_cmd, "ls-files"], cwd=repo_path, capture_output=True, text=True, check=True, timeout=10
+        )
+        # Find unique directories containing C/C++ files
+        c_dirs: set[Path] = set()
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            file_path = Path(line)
+            if file_path.suffix in c_extensions and len(file_path.parts) > 1:
+                # Get the top-level directory of this file
+                c_dirs.add(repo_path / file_path.parts[0])
+
+        if c_dirs:
+            # Verify directories exist and contain C/C++ files
+            found_dirs: list[Path] = []
+            for dir_path in sorted(c_dirs):
+                if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
+                    found_dirs.append(dir_path)
+            return found_dirs
+    return []
 
 
 def detect_c_code(
@@ -276,90 +408,35 @@ def detect_c_code(
         Empty list if no C/C++ code found.
     """
     c_extensions = {".c", ".h", ".cpp", ".hpp", ".cc", ".hh"}
-    found_dirs: list[Path] = []
 
     # Priority 1: Explicit CLI option
     if explicit_dirs:
-        for dir_str in explicit_dirs:
-            dir_path = (repo_path / dir_str).resolve()
-            if dir_path.exists() and dir_path.is_dir():
-                # Verify directory contains C/C++ files
-                if _contains_c_files(dir_path, c_extensions):
-                    found_dirs.append(dir_path)
+        found_dirs = _detect_c_code_from_explicit(repo_path, explicit_dirs, c_extensions)
         if found_dirs:
             return found_dirs
 
     # Priority 2: Environment variable
-    env_dirs = os.getenv("MKAPIDOCS_C_SOURCE_DIRS")
-    if env_dirs:
-        for dir_str in env_dirs.split(":"):
-            dir_path = (repo_path / dir_str.strip()).resolve()
-            if dir_path.exists() and dir_path.is_dir():
-                if _contains_c_files(dir_path, c_extensions):
-                    found_dirs.append(dir_path)
+    if env_dirs := os.getenv("MKAPIDOCS_C_SOURCE_DIRS"):
+        found_dirs = _detect_c_code_from_env(repo_path, env_dirs, c_extensions)
         if found_dirs:
             return found_dirs
 
     # Priority 3: pypis_delivery_service config
     if pyproject:
-        cmake_source_dir = pyproject.cmake_source_dir
-        if cmake_source_dir:
-            dir_path = (repo_path / cmake_source_dir).resolve()
-            if not dir_path.exists():
-                console.print(
-                    f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
-                    + "does not exist, falling back to auto-detection[/yellow]"
-                )
-            elif not dir_path.is_dir():
-                console.print(
-                    f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
-                    + "is not a directory, falling back to auto-detection[/yellow]"
-                )
-            elif not _contains_c_files(dir_path, c_extensions):
-                console.print(
-                    f"[yellow]Warning: pypis_delivery_service cmake_source_dir '{cmake_source_dir}' "
-                    + "contains no C/C++ files, falling back to auto-detection[/yellow]"
-                )
-            else:
-                # Valid directory with C files
-                return [dir_path]
+        found_dirs = _detect_c_code_from_config(repo_path, pyproject, c_extensions)
+        if found_dirs:
+            return found_dirs
 
     # Priority 4: Auto-detect via git ls-files
-    try:
-        result = subprocess.run(
-            ["git", "ls-files"], cwd=repo_path, capture_output=True, text=True, check=True, timeout=10
-        )
-        # Find unique directories containing C/C++ files
-        c_dirs: set[Path] = set()
-        for line in result.stdout.strip().split("\n"):
-            if not line:
-                continue
-            file_path = Path(line)
-            if file_path.suffix in c_extensions:
-                # Get the top-level directory of this file
-                if len(file_path.parts) > 1:
-                    c_dirs.add(repo_path / file_path.parts[0])
-
-        if c_dirs:
-            # Verify directories exist and contain C/C++ files
-            for dir_path in sorted(c_dirs):
-                if dir_path.exists() and dir_path.is_dir():
-                    if _contains_c_files(dir_path, c_extensions):
-                        found_dirs.append(dir_path)
-            if found_dirs:
-                return found_dirs
-
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        # Git not available or not a git repo - continue to fallback
-        pass
+    if found_dirs := _detect_c_code_from_git(repo_path, c_extensions):
+        return found_dirs
 
     # Priority 5: Fallback to source/ directory
     source_dir = repo_path / "source"
-    if source_dir.exists() and source_dir.is_dir():
-        if _contains_c_files(source_dir, c_extensions):
-            found_dirs.append(source_dir.resolve())
+    if source_dir.exists() and source_dir.is_dir() and _contains_c_files(source_dir, c_extensions):
+        return [source_dir.resolve()]
 
-    return found_dirs
+    return []
 
 
 def detect_typer_dependency(pyproject: PyprojectConfig) -> bool:
@@ -373,6 +450,51 @@ def detect_typer_dependency(pyproject: PyprojectConfig) -> bool:
     """
     dependencies = pyproject.project.dependencies
     return any(dep.strip().lower().startswith("typer") for dep in dependencies)
+
+
+def _is_typer_app_file(py_file: Path) -> bool:
+    """Check if a Python file contains a Typer app.
+
+    Args:
+        py_file: Path to Python file.
+
+    Returns:
+        True if file contains Typer app instantiation.
+    """
+    try:
+        content = py_file.read_text(encoding="utf-8")
+
+        # Quick text check first (optimization)
+        if "typer" not in content.lower() or "Typer(" not in content:
+            return False
+
+        # Parse AST to check for Typer app instantiation
+        tree = ast.parse(content, filename=str(py_file))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        # Skip files that can't be read or parsed
+        return False
+
+    has_typer_import = False
+    has_typer_app = False
+
+    for node in ast.walk(tree):
+        # Check for typer imports
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "typer":
+                        has_typer_import = True
+            elif node.module == "typer":  # node is ast.ImportFrom
+                has_typer_import = True
+
+        # Check for Typer() instantiation
+        if isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id == "Typer")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "Typer")
+        ):
+            has_typer_app = True
+
+    return has_typer_import and has_typer_app
 
 
 def detect_typer_cli_module(repo_path: Path, pyproject: PyprojectConfig) -> list[str]:
@@ -416,46 +538,12 @@ def detect_typer_cli_module(repo_path: Path, pyproject: PyprojectConfig) -> list
             if "test" in py_file.name or py_file.name.startswith("test_"):
                 continue
 
-            try:
-                content = py_file.read_text(encoding="utf-8")
-
-                # Quick text check first (optimization)
-                if "typer" not in content.lower() or "Typer(" not in content:
-                    continue
-
-                # Parse AST to check for Typer app instantiation
-                tree = ast.parse(content, filename=str(py_file))
-
-                has_typer_import = False
-                has_typer_app = False
-
-                for node in ast.walk(tree):
-                    # Check for typer imports
-                    if isinstance(node, (ast.Import, ast.ImportFrom)):
-                        if isinstance(node, ast.Import):
-                            for alias in node.names:
-                                if alias.name == "typer":
-                                    has_typer_import = True
-                        elif node.module == "typer":  # node is ast.ImportFrom
-                            has_typer_import = True
-
-                    # Check for Typer() instantiation
-                    if isinstance(node, ast.Call):
-                        if (isinstance(node.func, ast.Name) and node.func.id == "Typer") or (
-                            isinstance(node.func, ast.Attribute) and node.func.attr == "Typer"
-                        ):
-                            has_typer_app = True
-
-                if has_typer_import and has_typer_app:
-                    # Convert file path to module path
-                    relative_path = py_file.relative_to(source_path)
-                    module_parts = [*list(relative_path.parts[:-1]), relative_path.stem]
-                    module_path = ".".join([package_name, *module_parts])
-                    cli_modules.append(module_path)
-
-            except (OSError, SyntaxError, UnicodeDecodeError):
-                # Skip files that can't be read or parsed
-                continue
+            if _is_typer_app_file(py_file):
+                # Convert file path to module path
+                relative_path = py_file.relative_to(source_path)
+                module_parts = [*list(relative_path.parts[:-1]), relative_path.stem]
+                module_path = ".".join([package_name, *module_parts])
+                cli_modules.append(module_path)
 
     return cli_modules
 
@@ -471,7 +559,8 @@ def detect_private_registry(pyproject: PyprojectConfig) -> tuple[bool, str | Non
     """
     if pyproject.uv_index:
         first_index = pyproject.uv_index[0]
-        return True, first_index.get("url")
+        url = first_index.get("url")
+        return True, url if isinstance(url, str) else None
 
     return False, None
 
@@ -485,16 +574,24 @@ def update_ruff_config(pyproject: PyprojectConfig) -> PyprojectConfig:
     Returns:
         Updated pyproject configuration.
     """
-    # Ensure tool.ruff.lint.select exists
     tool = pyproject.tool
-    if "ruff" not in tool:
-        tool["ruff"] = {}
-    if "lint" not in tool["ruff"]:
-        tool["ruff"]["lint"] = {}
-    if "select" not in tool["ruff"]["lint"]:
-        tool["ruff"]["lint"]["select"] = []
 
-    select = tool["ruff"]["lint"]["select"]
+    # Ensure tool.ruff exists and is a table
+    ruff_raw = tool.get("ruff")
+    ruff: TomlTable = cast(TomlTable, ruff_raw) if isinstance(ruff_raw, dict) else {}
+    tool["ruff"] = ruff
+
+    # Ensure tool.ruff.lint exists and is a table
+    lint_raw = ruff.get("lint")
+    lint: TomlTable = lint_raw if isinstance(lint_raw, dict) else {}
+    ruff["lint"] = lint
+
+    # Ensure tool.ruff.lint.select exists and is a list of strings
+    select_raw = lint.get("select")
+    select: list[str] = [s for s in select_raw if isinstance(s, str)] if isinstance(select_raw, list) else []
+    lint["select"] = select
+
+    # Add docstring rules if not present
     if "DOC" not in select:
         select.append("DOC")
     if "D" not in select:
@@ -529,7 +626,7 @@ def create_mkdocs_config(
     Raises:
         CLIError: If existing YAML cannot be parsed or merge fails
     """
-    env = Environment(keep_trailing_newline=True)
+    env = Environment(keep_trailing_newline=True, autoescape=True)
     template = env.from_string(MKDOCS_YML_TEMPLATE)
 
     # Convert absolute Path objects to relative string paths for template
@@ -568,6 +665,96 @@ def create_mkdocs_config(
         console.print(f"[green]:white_check_mark:[/green] Created {mkdocs_path.name}")
 
 
+def _is_pages_job(job: dict[str, object]) -> bool:
+    """Check if a job is a GitHub Pages deployment job.
+
+    Args:
+        job: Job dictionary.
+
+    Returns:
+        True if job is a Pages deployment job.
+    """
+    # Check steps for actions/deploy-pages
+    steps: list[object] = cast(list[object], job.get("steps", []))
+    for step in steps:
+        if isinstance(step, dict) and "uses" in step:
+            uses = str(step["uses"])
+            if "actions/deploy-pages" in uses:
+                return True
+
+    # Check environment
+    environment = job.get("environment")
+    env_name = ""
+    if isinstance(environment, dict):
+        name = str(environment.get("name", ""))
+        env_name = name
+    elif isinstance(environment, str):
+        env_name = environment
+
+    return env_name == "github-pages" or env_name.startswith("github-pages")
+
+
+def _uses_mkapidocs(job: dict[str, object]) -> bool:
+    """Check if a job uses mkapidocs.
+
+    Args:
+        job: Job dictionary.
+
+    Returns:
+        True if job uses mkapidocs.
+    """
+    steps: list[object] = cast(list[object], job.get("steps", []))
+    for step in steps:
+        if isinstance(step, dict) and "run" in step:
+            run_cmd = str(step["run"])
+            if "mkapidocs" in run_cmd:
+                return True
+    return False
+
+
+def _check_existing_github_workflow(workflow_file: Path) -> bool:
+    """Check if a GitHub workflow file already handles Pages deployment.
+
+    Args:
+        workflow_file: Path to workflow file.
+
+    Returns:
+        True if Pages deployment is found.
+    """
+    yaml = YAML()
+    with suppress(YAMLError, OSError):
+        workflow_content = workflow_file.read_text(encoding="utf-8")
+        workflow = yaml.load(workflow_content)
+
+        if not isinstance(workflow, dict) or "jobs" not in workflow:
+            return False
+
+        jobs = cast(dict[str, object], workflow.get("jobs", {}))
+
+        for job_name, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+
+            # Cast job to dict[str, object] for helper functions
+            job_dict = cast(dict[str, object], job)
+
+            if _is_pages_job(job_dict):
+                if _uses_mkapidocs(job_dict):
+                    console.print(
+                        f"[green]Found existing pages deployment job '{job_name}' in '{workflow_file.name}' using mkapidocs.[/green]"
+                    )
+                else:
+                    console.print(
+                        f"[yellow]Found existing pages deployment job '{job_name}' in '{workflow_file.name}'.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]You should update it to run 'uv run mkapidocs build' before deployment.[/yellow]"
+                    )
+                return True
+
+    return False
+
+
 def create_github_actions(repo_path: Path) -> None:
     """Create .github/workflows/pages.yml for GitHub Pages deployment.
 
@@ -582,72 +769,8 @@ def create_github_actions(repo_path: Path) -> None:
 
     # Check for existing pages deployment in any workflow
     for workflow_file in github_dir.glob("*.y*ml"):
-        try:
-            workflow_content = workflow_file.read_text(encoding="utf-8")
-            workflow = yaml.safe_load(workflow_content)
-
-            if not isinstance(workflow, dict) or "jobs" not in workflow:
-                continue
-
-            jobs = workflow.get("jobs", {})
-            if not isinstance(jobs, dict):
-                continue
-
-            for job_name, job in jobs.items():
-                if not isinstance(job, dict):
-                    continue
-
-                # Check for pages deployment indicators
-                is_pages_job = False
-
-                # Check steps for actions/deploy-pages
-                steps = job.get("steps", [])
-                if isinstance(steps, list):
-                    for step in steps:
-                        if isinstance(step, dict) and "uses" in step:
-                            if "actions/deploy-pages" in step["uses"]:
-                                is_pages_job = True
-                                break
-
-                # Check environment
-                if not is_pages_job:
-                    environment = job.get("environment")
-                    if isinstance(environment, dict):
-                        env_name = environment.get("name", "")
-                    elif isinstance(environment, str):
-                        env_name = environment
-                    else:
-                        env_name = ""
-
-                    if env_name == "github-pages" or env_name.startswith("github-pages"):
-                        is_pages_job = True
-
-                if is_pages_job:
-                    # Found a pages job, check if it uses mkapidocs
-                    uses_mkapidocs = False
-                    if isinstance(steps, list):
-                        for step in steps:
-                            if isinstance(step, dict) and "run" in step:
-                                if "mkapidocs" in step["run"]:
-                                    uses_mkapidocs = True
-                                    break
-
-                    if not uses_mkapidocs:
-                        console.print(
-                            f"[yellow]Found existing pages deployment job '{job_name}' in '{workflow_file.name}'.[/yellow]"
-                        )
-                        console.print(
-                            "[yellow]You should update it to run 'uv run mkapidocs build' before deployment.[/yellow]"
-                        )
-                    else:
-                        console.print(
-                            f"[green]Found existing pages deployment job '{job_name}' in '{workflow_file.name}' using mkapidocs.[/green]"
-                        )
-
-                    return
-
-        except (yaml.YAMLError, OSError):
-            continue
+        if _check_existing_github_workflow(workflow_file):
+            return
 
     content = GITHUB_ACTIONS_PAGES_TEMPLATE
 
@@ -663,66 +786,85 @@ def create_github_actions(repo_path: Path) -> None:
         console.print(f"[green]:white_check_mark:[/green] Created {workflow_path.name}")
 
 
-def create_gitlab_ci(repo_path: Path) -> None:
-    """Create .gitlab/workflows/pages.gitlab-ci.yml for GitLab Pages deployment.
+def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
+    """Check if .gitlab-ci.yml already includes the pages workflow.
 
-    Creates a fresh GitLab CI workflow file. If the file exists, it will be
-    overwritten with the template.
+    Args:
+        gitlab_ci_path: Path to .gitlab-ci.yml.
+
+    Returns:
+        True if pages workflow include is found.
+    """
+    with suppress(YAMLError, OSError):
+        config = GitLabCIConfig.load(gitlab_ci_path)
+        if config is None:
+            return False
+
+        # Validate with Pydantic for typed access
+        validated = GitLabIncludeAdapter.validate_python(config.include_list)
+        includes = validated if isinstance(validated, list) else [validated]
+
+        for inc in includes:
+            if isinstance(inc, GitLabIncludeLocal):
+                if inc.local == ".gitlab/workflows/pages.gitlab-ci.yml":
+                    console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
+                    return True
+            elif inc == ".gitlab/workflows/pages.gitlab-ci.yml":
+                console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
+                return True
+
+    return False
+
+
+def create_gitlab_ci(repo_path: Path) -> None:
+    """Create or update .gitlab-ci.yml for GitLab Pages deployment.
+
+    Creates .gitlab/workflows/pages.gitlab-ci.yml and includes it in .gitlab-ci.yml.
 
     Args:
         repo_path: Path to repository.
     """
-    gitlab_dir = repo_path / ".gitlab" / "workflows"
-    gitlab_dir.mkdir(parents=True, exist_ok=True)
-
-    # Check for existing pages job in .gitlab-ci.yml
     gitlab_ci_path = repo_path / ".gitlab-ci.yml"
-    if gitlab_ci_path.exists():
-        try:
-            ci_content = gitlab_ci_path.read_text(encoding="utf-8")
-            ci_config = yaml.safe_load(ci_content)
+    workflows_dir = repo_path / ".gitlab" / "workflows"
+    pages_workflow_path = workflows_dir / "pages.gitlab-ci.yml"
 
-            if isinstance(ci_config, dict) and "pages" in ci_config:
-                # Found pages job
-                pages_job = ci_config["pages"]
-                uses_mkapidocs = False
+    # Create workflows directory
+    workflows_dir.mkdir(parents=True, exist_ok=True)
 
-                if isinstance(pages_job, dict):
-                    script = pages_job.get("script", [])
-                    if isinstance(script, str):
-                        script = [script]
-
-                    if isinstance(script, list):
-                        for line in script:
-                            if "mkapidocs" in line:
-                                uses_mkapidocs = True
-                                break
-
-                if not uses_mkapidocs:
-                    console.print("[yellow]Found existing 'pages' job in '.gitlab-ci.yml'.[/yellow]")
-                    console.print(
-                        "[yellow]You should update it to run 'uv run mkapidocs build' before deployment.[/yellow]"
-                    )
-                else:
-                    console.print("[green]Found existing 'pages' job in '.gitlab-ci.yml' using mkapidocs.[/green]")
-
-                return
-
-        except (yaml.YAMLError, OSError):
-            pass
-
-    content = GITLAB_CI_PAGES_TEMPLATE
-
-    workflow_path = gitlab_dir / "pages.gitlab-ci.yml"
-    exists_before = workflow_path.exists()
-
-    # Always write fresh
-    _ = workflow_path.write_text(content)
-
-    if exists_before:
-        console.print(f"[green]:white_check_mark:[/green] Updated {workflow_path.name}")
+    # Write pages workflow file
+    if not pages_workflow_path.exists():
+        _ = pages_workflow_path.write_text(GITLAB_CI_PAGES_TEMPLATE, encoding="utf-8")
+        console.print(f"[green]:white_check_mark: Created {pages_workflow_path.relative_to(repo_path)}[/green]")
     else:
-        console.print(f"[green]:white_check_mark:[/green] Created {workflow_path.name}")
+        console.print(f"[yellow]Skipping {pages_workflow_path.relative_to(repo_path)} (already exists)[/yellow]")
+
+    # Check for existing include
+    if _check_existing_gitlab_ci(gitlab_ci_path):
+        return
+
+    include_entry: dict[str, str] = {"local": ".gitlab/workflows/pages.gitlab-ci.yml"}
+
+    if gitlab_ci_path.exists():
+        # Modify existing file
+        try:
+            if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
+                console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
+            else:
+                # Fallback to append if structure is weird
+                with gitlab_ci_path.open("a", encoding="utf-8") as f:
+                    f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+                console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+
+        except (YAMLError, OSError):
+            # Fallback to append
+            with gitlab_ci_path.open("a", encoding="utf-8") as f:
+                f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+            console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+    else:
+        # Create new file
+        initial_content = "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+        _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
+        console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
 
 
 def create_index_page(
@@ -759,7 +901,7 @@ def create_index_page(
         console.print(f"[yellow]  Preserving existing {index_path.name}[/yellow]")
         return
 
-    env = Environment(keep_trailing_newline=True)
+    env = Environment(keep_trailing_newline=True, autoescape=True)
     template = env.from_string(INDEX_MD_TEMPLATE)
 
     content = template.render(
@@ -790,7 +932,7 @@ def create_api_reference(
     generated_dir = repo_path / "docs" / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
 
-    env = Environment(keep_trailing_newline=True)
+    env = Environment(keep_trailing_newline=True, autoescape=True)
     package_name = project_name.replace("-", "_")
 
     # Python API
@@ -830,8 +972,8 @@ def create_gen_files_script(repo_path: Path) -> None:
     target_script = repo_path / "docs" / "generated" / "gen_ref_pages.py"
     target_script.parent.mkdir(parents=True, exist_ok=True)
 
-    # Read script content from resources
-    script_content = importlib.resources.read_text(resources, "gen_ref_pages.py")
+    # Read script content from resources using modern files() API
+    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
 
     _ = target_script.write_text(script_content)
 
@@ -883,20 +1025,25 @@ def create_generated_content(
     features_content = "\n".join(features) + "\n"
     _ = (generated_dir / "index-features.md").write_text(features_content)
 
-    # install-registry.md
+    # install-command.md
     if has_private_registry and private_registry_url:
-        registry_content = f"""## Private Registry
-
-This package is published to a private registry:
+        # Private registry installation
+        install_content = f"""To install from the private registry:
 
 ```bash
-uv pip install {project_name} --index-url {private_registry_url}
+uv add --index="{private_registry_url}" {project_name}
 ```
 """
     else:
-        registry_content = ""
+        # Standard installation
+        install_content = f"""To install the package:
 
-    _ = (generated_dir / "install-registry.md").write_text(registry_content)
+```bash
+uv add {project_name}
+```
+"""
+
+    _ = (generated_dir / "install-command.md").write_text(install_content)
 
 
 def update_gitignore(repo_path: Path, provider: CIProvider, include_generated: bool = False) -> None:
@@ -984,7 +1131,7 @@ def create_supporting_docs(
     docs_dir = repo_path / "docs"
     docs_dir.mkdir(exist_ok=True)
 
-    env = Environment(keep_trailing_newline=True)
+    env = Environment(keep_trailing_newline=True, autoescape=True)
 
     requires_python = pyproject.project.requires_python or "3.11+"
 
@@ -1016,6 +1163,64 @@ def create_supporting_docs(
         console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
 
 
+def _ensure_mkapidocs_dependency(config: TomlTable, dep_spec: str, pyproject_path: Path, repo_path: Path) -> None:
+    """Ensure mkapidocs is in dependency-groups."""
+    # Initialize dependency-groups if it doesn't exist
+    if "dependency-groups" not in config:
+        config["dependency-groups"] = {}
+
+    # Get dependency-groups as a properly typed dict
+    dep_groups_raw = config.get("dependency-groups")
+    if not isinstance(dep_groups_raw, dict):
+        dep_groups: TomlTable = {}
+        config["dependency-groups"] = dep_groups
+    else:
+        dep_groups = dep_groups_raw
+
+    # Initialize dev group if it doesn't exist
+    if "dev" not in dep_groups:
+        dep_groups["dev"] = []
+
+    # Convert to list if it's not already
+    raw_dev_deps = dep_groups.get("dev")
+    if not isinstance(raw_dev_deps, list):
+        dev_deps: list[str] = []
+        dep_groups["dev"] = dev_deps
+    else:
+        # Cast to known type and filter to strings
+        typed_list = cast(list[TomlValue], raw_dev_deps)
+        dev_deps = [str(dep) for dep in typed_list if isinstance(dep, str)]
+
+    # Check if mkapidocs is already in dependencies
+    has_mkapidocs = any(dep.startswith("mkapidocs") or "mkapidocs" in dep for dep in dev_deps)
+
+    if not has_mkapidocs:
+        # Add mkapidocs with local path
+        new_dep = f"mkapidocs @ file://{dep_spec}"
+        dev_deps.append(new_dep)
+        # Update config with the new dependency list
+        dep_groups["dev"] = dev_deps
+
+        # Write updated pyproject.toml
+        with open(pyproject_path, "w", encoding="utf-8") as f:
+            tomlkit.dump(config, f)
+
+        console.print(f"[green]:white_check_mark: Added mkapidocs to {repo_path}/pyproject.toml[/green]")
+
+        # Run uv sync to install mkapidocs in target project
+        if uv_cmd := which("uv"):
+            console.print("[blue]Installing mkapidocs in target project environment...[/blue]")
+            result = subprocess.run([uv_cmd, "sync"], cwd=repo_path, capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                console.print("[green]:white_check_mark: Successfully installed mkapidocs in target project[/green]")
+            else:
+                console.print(f"[yellow]:warning: Failed to sync dependencies: {result.stderr}[/yellow]")
+        else:
+            console.print("[yellow]:warning: uv command not found, skipping sync[/yellow]")
+    else:
+        console.print("[blue]:information: mkapidocs already in target project dependencies[/blue]")
+
+
 def add_mkapidocs_to_target_project(repo_path: Path) -> None:
     """Add mkapidocs to target project's dev dependencies.
 
@@ -1032,8 +1237,8 @@ def add_mkapidocs_to_target_project(repo_path: Path) -> None:
 
     try:
         # Read current pyproject.toml
-        with open(pyproject_path, "rb") as f:
-            config: dict[str, object] = tomllib.load(f)
+        with open(pyproject_path, encoding="utf-8") as f:
+            config = tomlkit.load(f)
 
         # Get the path to mkapidocs (this package)
         # First try to find it in the current environment
@@ -1043,101 +1248,29 @@ def add_mkapidocs_to_target_project(repo_path: Path) -> None:
         if (mkapidocs_path / "pyproject.toml").exists():
             # Development mode - use local path
             dep_spec = str(mkapidocs_path.absolute())
+            _ensure_mkapidocs_dependency(config, dep_spec, pyproject_path, repo_path)
         else:
             # Installed mode - will need to use git URL or PyPI when available
             # For now, skip if not in dev mode
             console.print(
                 "[yellow]:warning: mkapidocs not in development mode, skipping installation in target[/yellow]"
             )
-            return
 
-        # Initialize dependency-groups if it doesn't exist
-        if "dependency-groups" not in config:
-            config["dependency-groups"] = {}
-
-        # Get dependency-groups as a properly typed dict
-        dep_groups_raw = config.get("dependency-groups")
-        if not isinstance(dep_groups_raw, dict):
-            dep_groups: dict[str, object] = {}
-            config["dependency-groups"] = dep_groups
-        else:
-            dep_groups = cast(dict[str, object], dep_groups_raw)
-
-        # Initialize dev group if it doesn't exist
-        if "dev" not in dep_groups:
-            dep_groups["dev"] = []
-
-        # Convert to list if it's not already
-        raw_dev_deps = dep_groups.get("dev")
-        if not isinstance(raw_dev_deps, list):
-            dev_deps: list[str] = []
-            dep_groups["dev"] = dev_deps
-        else:
-            # Cast to known type and filter to strings
-            typed_list = cast(list[object], raw_dev_deps)
-            dev_deps = [str(dep) for dep in typed_list if isinstance(dep, str)]
-
-        # Check if mkapidocs is already in dependencies
-        has_mkapidocs = any(dep.startswith("mkapidocs") or "mkapidocs" in dep for dep in dev_deps)
-
-        if not has_mkapidocs:
-            # Add mkapidocs with local path
-            new_dep = f"mkapidocs @ file://{dep_spec}"
-            dev_deps.append(new_dep)
-            # Update config with the new dependency list
-            dep_groups["dev"] = dev_deps
-
-            # Write updated pyproject.toml
-            with open(pyproject_path, "wb") as f:
-                tomli_w.dump(config, f)
-
-            console.print(f"[green]:white_check_mark: Added mkapidocs to {repo_path}/pyproject.toml[/green]")
-
-            # Run uv sync to install mkapidocs in target project
-            uv_cmd = which("uv")
-            if uv_cmd:
-                console.print("[blue]Installing mkapidocs in target project environment...[/blue]")
-                result = subprocess.run([uv_cmd, "sync"], cwd=repo_path, capture_output=True, text=True, check=False)
-                if result.returncode == 0:
-                    console.print(
-                        "[green]:white_check_mark: Successfully installed mkapidocs in target project[/green]"
-                    )
-                else:
-                    console.print(f"[yellow]:warning: Failed to sync dependencies: {result.stderr}[/yellow]")
-            else:
-                console.print("[yellow]:warning: uv command not found, skipping sync[/yellow]")
-        else:
-            console.print("[blue]:information: mkapidocs already in target project dependencies[/blue]")
-
+    except (OSError, exceptions.ParseError):
+        console.print("[red]:warning: Failed to read pyproject.toml[/red]")
     except Exception as e:
         console.print(f"[yellow]:warning: Failed to add mkapidocs to target project: {e}[/yellow]")
 
 
-def setup_documentation(
-    repo_path: Path,
-    provider: CIProvider | None = None,
-    github_url_base: str | None = None,
-    c_source_dirs: list[str] | None = None,
-) -> CIProvider:
-    """Set up MkDocs documentation for a Python repository.
+def _get_project_info(pyproject: PyprojectConfig) -> tuple[str, str, str]:
+    """Extract project name, description, and license from pyproject.
 
     Args:
-        repo_path: Path to repository.
-        provider: CI/CD provider (auto-detected if None).
-        github_url_base: Base URL for GitHub Pages (deprecated, for backward compatibility).
-        c_source_dirs: Optional list of C/C++ source directories from CLI.
+        pyproject: Parsed pyproject.toml.
 
     Returns:
-        The CI provider that was used for setup.
-
-    Raises:
-        ValueError: If provider cannot be auto-detected.
-        typer.Exit: If setup fails.
+        Tuple containing (project_name, description, license_name).
     """
-    import typer
-
-    pyproject = read_pyproject(repo_path)
-
     project_name = pyproject.project.name
     description = pyproject.project.description or ""
     license_info = pyproject.project.license
@@ -1148,6 +1281,23 @@ def setup_documentation(
         license_name = license_info
     else:
         license_name = "See LICENSE file"
+    return project_name, description, license_name
+
+
+def _detect_provider_and_url(
+    repo_path: Path, provider: CIProvider | None, github_url_base: str | None
+) -> tuple[CIProvider, str]:
+    """Detect CI provider and site URL.
+
+    Args:
+        repo_path: Path to repository.
+        provider: Explicitly provided CI provider (or None).
+        github_url_base: Explicitly provided GitHub URL base (or None).
+
+    Returns:
+        Tuple containing (detected_provider, site_url).
+    """
+    import typer
 
     # Auto-detect provider if not specified
     if provider is None:
@@ -1185,6 +1335,24 @@ def setup_documentation(
         else:
             site_url = gitlab_url_base.rstrip("/")
 
+    return provider, site_url
+
+
+def _detect_features(
+    repo_path: Path, pyproject: PyprojectConfig, c_source_dirs: list[str] | None
+) -> tuple[list[Path], list[str], bool, bool, str | None]:
+    """Detect project features (C code, Typer, private registry).
+
+    Args:
+        repo_path: Path to repository.
+        pyproject: Parsed pyproject.toml.
+        c_source_dirs: Explicit C source directories (or None).
+
+    Returns:
+        Tuple containing (c_source_dirs_list, cli_modules, has_typer, has_private_registry, private_registry_url).
+    """
+    import typer
+
     c_source_dirs_list = detect_c_code(repo_path, explicit_dirs=c_source_dirs, pyproject=pyproject)
     has_typer = detect_typer_dependency(pyproject)
     has_private_registry, private_registry_url = detect_private_registry(pyproject)
@@ -1209,6 +1377,38 @@ def setup_documentation(
             )
             display_message(error_message, MessageType.ERROR, title="Typer CLI Not Found")
             raise typer.Exit(1)
+
+    return c_source_dirs_list, cli_modules, has_typer, has_private_registry, private_registry_url
+
+
+def setup_documentation(
+    repo_path: Path,
+    provider: CIProvider | None = None,
+    github_url_base: str | None = None,
+    c_source_dirs: list[str] | None = None,
+) -> CIProvider:
+    """Set up MkDocs documentation for a Python repository.
+
+    Args:
+        repo_path: Path to repository.
+        provider: CI/CD provider (auto-detected if None).
+        github_url_base: Base URL for GitHub Pages (deprecated, for backward compatibility).
+        c_source_dirs: Optional list of C/C++ source directories from CLI.
+
+    Returns:
+        The CI provider that was used for setup.
+
+    Raises:
+        ValueError: If provider cannot be auto-detected.
+        typer.Exit: If setup fails.
+    """
+    pyproject = read_pyproject(repo_path)
+
+    project_name, description, license_name = _get_project_info(pyproject)
+    provider, site_url = _detect_provider_and_url(repo_path, provider, github_url_base)
+    c_source_dirs_list, cli_modules, _, has_private_registry, private_registry_url = _detect_features(
+        repo_path, pyproject, c_source_dirs
+    )
 
     # has_typer_cli flag is True if CLI modules were actually detected
     has_typer_cli = len(cli_modules) > 0
@@ -1235,7 +1435,9 @@ def setup_documentation(
     create_generated_content(
         repo_path, project_name, c_source_dirs_list, cli_modules, has_private_registry, private_registry_url
     )
-    create_supporting_docs(repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, site_url)
+    create_supporting_docs(
+        repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, site_url, git_url=None
+    )
     create_gen_files_script(repo_path)
     update_gitignore(repo_path, provider)
 

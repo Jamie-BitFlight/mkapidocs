@@ -23,8 +23,20 @@ mkapidocs/
 ├── packages/
 │   └── mkapidocs/           # Main package
 │       ├── __init__.py      # Package init with version
-│       ├── cli.py           # Typer CLI application (main module)
-│       └── ...
+│       ├── cli.py           # Typer CLI entry point
+│       ├── builder.py       # Build/serve logic with environment detection
+│       ├── generator.py     # Content generation and CI/CD setup
+│       ├── validators.py    # Environment and project validation
+│       ├── models.py        # Pydantic models and enums
+│       ├── yaml_utils.py    # YAML merge utilities
+│       ├── version.py       # Version string
+│       ├── templates/       # Jinja2 and static templates
+│       │   ├── mkdocs.yml.j2        # MkDocs config template
+│       │   ├── pages.yml            # GitHub Actions workflow
+│       │   ├── gitlab-ci.yml        # GitLab CI workflow
+│       │   └── *_template.py        # Markdown content templates
+│       └── resources/       # Runtime resources
+│           └── gen_ref_pages.py     # API docs generation script
 ├── tests/                   # Test suite
 ├── pyproject.toml           # Package configuration
 └── README.md
@@ -32,17 +44,16 @@ mkapidocs/
 
 ### Key Components
 
-The CLI module (`packages/mkapidocs/cli.py`) is organized into distinct functional sections:
+The package is organized into separate modules:
 
-1. **Template System**: Inline Jinja2 templates for all generated files (mkdocs.yml, CI workflows, markdown docs, gen_ref_pages.py)
-2. **Exception Classes**: CLIError and BuildError for error handling
-3. **Message Types**: MessageType enum for display formatting
-4. **Validation System**: Environment and project validation with DoxygenInstaller and SystemValidator classes
-5. **Feature Detection**: Git URL parsing, C/C++ code detection, Typer CLI detection, private registry detection, provider auto-detection
-6. **YAML Merge System**: Smart merging of mkdocs.yml preserving user customizations
-7. **Content Generation**: Functions that render templates and create documentation structure
-8. **Build/Serve Commands**: MkDocs integration with target project environment detection
-9. **Typer CLI Commands**: version, info, setup, build, serve commands
+- **cli.py**: Typer CLI entry point with commands (version, info, setup, build, serve)
+- **generator.py**: Content generation, CI/CD workflow creation, feature detection, YAML merge system
+- **builder.py**: Build/serve logic with target environment detection and uvx fallback
+- **validators.py**: Environment and project validation with DoxygenInstaller
+- **models.py**: CIProvider enum, MessageType enum, Pydantic models
+- **yaml_utils.py**: Smart YAML merging utilities
+- **templates/**: Jinja2 templates and static workflow files
+- **resources/**: Runtime resources (gen_ref_pages.py copied to target projects)
 
 ### Template Rendering Flow
 
@@ -206,7 +217,7 @@ For Typer CLI apps, the package attempts to find the CLI entry point by:
 
 The generated mkdocs.yml is feature-conditional:
 
-- Base plugins always included: search, mkdocstrings (Python), mermaid2, termynal, recently-updated
+- Base plugins always included: search, mkdocstrings (Python), mermaid2, termynal
 - Conditional plugins based on detection:
   - `mkdocs-typer2` if Typer dependency found
   - `mkdoxy` if C/C++ files found in source/
@@ -246,22 +257,25 @@ This allows users to customize their docs and safely re-run setup to pick up new
 
 ### GitHub Actions
 
-Generated `.github/workflows/pages.yml` uses:
+Creates `.github/workflows/pages.yml` with:
 
 - `actions/checkout@v4` for code checkout
 - `actions/setup-python@v5` for Python 3.11 setup
 - `astral-sh/setup-uv@v4` for uv installation
-- Runs `mkapidocs build . --strict` to build documentation
+- Runs `uv run mkapidocs build . --strict` to build documentation
 - `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4` for GitHub Pages deployment
 - Deploys to GitHub Pages on pushes to main branch only
 
 ### GitLab CI
 
-Generated `pages` job in `.gitlab-ci.yml` uses:
+Creates `.gitlab/workflows/pages.gitlab-ci.yml` with a `pages` job:
 
-- Python environment with uv
-- Runs `mkapidocs build . --strict`
+- Uses `ghcr.io/astral-sh/uv:python3.11` image
+- Runs `uv run mkapidocs build . --strict`
 - Deploys public/ directory to GitLab Pages
+- Runs only on default branch
+
+**Note:** Before creating the workflow, `create_gitlab_ci()` checks if `.gitlab-ci.yml` already has a `pages` job. If found, it skips creation and warns the user to update their existing job to use mkapidocs.
 
 ## Validation System
 
@@ -291,12 +305,18 @@ All content generation functions follow this pattern:
 
 ## Working with Templates
 
-Templates are inline string constants in `cli.py`. To modify:
+Templates are stored in `packages/mkapidocs/templates/`:
 
-1. Find template constant (e.g., `MKDOCS_YML_TEMPLATE`)
-2. Edit Jinja2 syntax directly in the constant
-3. Template variables come from feature detection functions
-4. Test by running setup on a sample project
+- **mkdocs.yml.j2**: Jinja2 template for MkDocs configuration
+- **pages.yml**: Static GitHub Actions workflow template
+- **gitlab-ci.yml**: Static GitLab CI workflow template
+- **\*\_template.py**: Python modules with markdown content templates
+
+To modify:
+
+1. Edit the appropriate template file in `packages/mkapidocs/templates/`
+2. For Jinja2 templates (.j2), template variables come from feature detection in `generator.py`
+3. Test by running `uv run mkapidocs setup` on a sample project
 
 ## Code Quality Standards
 

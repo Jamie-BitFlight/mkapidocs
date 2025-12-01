@@ -38,10 +38,6 @@ plugins:
 - mkdocs-typer2
 - mermaid2
 - termynal
-- recently-updated:
-    limit: 10
-    exclude:
-    - index.md
 markdown_extensions:
 - admonition
 - pymdownx.details

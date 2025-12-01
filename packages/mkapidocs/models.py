@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date, datetime, time
 from enum import Enum
-from typing import Any, ClassVar
+from pathlib import Path
+from typing import ClassVar, TypeAlias, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from ruamel.yaml import YAML
+
+# TOML spec v1.0.0 types - https://toml.io/en/v1.0.0
+# These mirror the types in typings/tomlkit/__init__.pyi
+# Use string form to avoid runtime evaluation issues with forward references
+TomlPrimitive: TypeAlias = "str | int | float | bool | date | time | datetime"
+TomlArray: TypeAlias = "list[str] | list[int] | list[float] | list[bool] | list[date] | list[time] | list[datetime] | list[TomlTable] | list[TomlArray]"
+TomlValue: TypeAlias = "TomlPrimitive | TomlArray | TomlTable"
+TomlTable: TypeAlias = "dict[str, TomlValue]"
 
 
 class MessageType(Enum):
@@ -35,7 +47,7 @@ class ProjectConfig(BaseModel):
     name: str
     version: str | None = None
     description: str | None = None
-    requires_python: str | None = Field(None, alias="requires-python")
+    requires_python: str | None = Field(default=None, alias="requires-python")
     dependencies: list[str] = Field(default_factory=list)
     license: str | dict[str, str] | None = None
 
@@ -47,44 +59,63 @@ class PyprojectConfig(BaseModel):
     """
 
     project: ProjectConfig
-    tool: dict[str, Any] = Field(default_factory=dict)
+    # Use object for Pydantic (avoids recursion with TomlValue)
+    # Actual TOML values are: str, int, float, bool, date, time, datetime, list, dict
+    tool: dict[str, object] = Field(default_factory=dict)
 
     @property
-    def uv_index(self) -> list[dict[str, str]]:
+    def tool_typed(self) -> TomlTable:
+        """Get tool table with proper TOML typing for external code."""
+        return cast(TomlTable, self.tool)
+
+    @property
+    def uv_index(self) -> list[dict[str, TomlValue]]:
         """Get UV index configuration."""
         uv = self.tool.get("uv", {})
-        if isinstance(uv, dict):
-            index = uv.get("index", [])
-            if isinstance(index, list):
-                return [i for i in index if isinstance(i, dict)]
-        return []
+        if not isinstance(uv, dict):
+            return []
+        uv_table = cast(dict[str, object], uv)
+        index = uv_table.get("index", [])
+        if not isinstance(index, list):
+            return []
+        index_list = cast(list[object], index)
+        return [cast(dict[str, TomlValue], item) for item in index_list if isinstance(item, dict)]
 
     @property
     def ruff_lint_select(self) -> list[str]:
         """Get Ruff lint select configuration."""
         ruff = self.tool.get("ruff", {})
-        if isinstance(ruff, dict):
-            lint = ruff.get("lint", {})
-            if isinstance(lint, dict):
-                select = lint.get("select", [])
-                if isinstance(select, list):
-                    return [s for s in select if isinstance(s, str)]
-        return []
+        if not isinstance(ruff, dict):
+            return []
+        ruff_table = cast(dict[str, object], ruff)
+        lint = ruff_table.get("lint", {})
+        if not isinstance(lint, dict):
+            return []
+        lint_table = cast(dict[str, object], lint)
+        select = lint_table.get("select", [])
+        if not isinstance(select, list):
+            return []
+        select_list = cast(list[object], select)
+        return [s for s in select_list if isinstance(s, str)]
 
     @property
     def cmake_source_dir(self) -> str | None:
         """Get pypis_delivery_service cmake_source_dir."""
         pds = self.tool.get("pypis_delivery_service", {})
-        if isinstance(pds, dict):
-            return pds.get("cmake_source_dir")
+        if not isinstance(pds, dict):
+            return None
+        pds_table = cast(dict[str, object], pds)
+        val = pds_table.get("cmake_source_dir")
+        if isinstance(val, str):
+            return val
         return None
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> PyprojectConfig:
+    def from_dict(cls, data: TomlTable) -> PyprojectConfig:
         """Create PyprojectConfig from raw TOML dictionary.
 
         Args:
-            data: Raw dictionary from tomllib.load()
+            data: Raw dictionary from tomlkit.load()
 
         Returns:
             Parsed and validated PyprojectConfig
@@ -94,10 +125,197 @@ class PyprojectConfig(BaseModel):
         """
         return cls.model_validate(data)
 
-    def to_dict(self) -> dict[str, object]:
-        """Convert to dictionary suitable for tomli_w.dump().
+    def to_dict(self) -> TomlTable:
+        """Convert to dictionary suitable for tomlkit.dump().
 
         Returns:
             Dictionary with proper TOML types
         """
-        return self.model_dump(by_alias=True, exclude_none=True, mode="python")
+        return cast(TomlTable, self.model_dump(by_alias=True, exclude_none=True, mode="python"))
+
+
+# GitLab CI include entry models
+# See: https://docs.gitlab.com/ee/ci/yaml/#include
+
+
+class GitLabIncludeLocal(BaseModel):
+    """GitLab CI include entry with local path.
+
+    Example:
+        include:
+          - local: '/templates/.gitlab-ci-template.yml'
+    """
+
+    local: str
+
+
+class GitLabIncludeRemote(BaseModel):
+    """GitLab CI include entry with remote URL.
+
+    Example:
+        include:
+          - remote: 'https://gitlab.com/example-project/-/raw/main/.gitlab-ci.yml'
+    """
+
+    remote: str
+
+
+class GitLabIncludeTemplate(BaseModel):
+    """GitLab CI include entry with GitLab template.
+
+    Example:
+        include:
+          - template: 'Auto-DevOps.gitlab-ci.yml'
+    """
+
+    template: str
+
+
+class GitLabIncludeProject(BaseModel):
+    """GitLab CI include entry from another project.
+
+    Example:
+        include:
+          - project: 'my-group/my-project'
+            ref: main
+            file: '/templates/.gitlab-ci-template.yml'
+    """
+
+    project: str
+    file: str | list[str]
+    ref: str | None = None
+
+
+class GitLabIncludeComponent(BaseModel):
+    """GitLab CI include entry for CI/CD component.
+
+    Example:
+        include:
+          - component: '$CI_SERVER_FQDN/my-org/security-components/secret-detection@1.0'
+    """
+
+    component: str
+
+
+# GitLab CI include can be:
+# - A string path (defaults to local or remote based on format)
+# - A dict with one of: local, remote, template, project, or component
+GitLabIncludeEntry = (
+    str
+    | GitLabIncludeLocal
+    | GitLabIncludeRemote
+    | GitLabIncludeTemplate
+    | GitLabIncludeProject
+    | GitLabIncludeComponent
+)
+
+# GitLab CI include value can be a single entry or a list of entries
+GitLabIncludeValue = GitLabIncludeEntry | list[GitLabIncludeEntry]
+
+# TypeAdapter for validating GitLab CI include from raw YAML data (handles both single and list)
+GitLabIncludeAdapter: TypeAdapter[GitLabIncludeValue] = TypeAdapter(GitLabIncludeValue)
+
+
+# Type aliases for raw YAML data (before Pydantic validation)
+GitLabIncludeEntryRaw = str | dict[str, str | list[str] | None]
+GitLabIncludeValueRaw = GitLabIncludeEntryRaw | list[GitLabIncludeEntryRaw]
+
+
+@dataclass
+class GitLabCIConfig:
+    """GitLab CI configuration from .gitlab-ci.yml.
+
+    Provides typed access to the `include` field. Other fields are stored in `extra`.
+    Use `from_dict()` to create from ruamel.yaml CommentedMap.
+
+    Example:
+        yaml = YAML()
+        data = yaml.load(path)
+        config = GitLabCIConfig.from_dict(data)
+        for entry in config.include_list:
+            ...
+    """
+
+    include: GitLabIncludeValueRaw | None = None
+    extra: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> GitLabCIConfig:
+        """Create GitLabCIConfig from a dictionary (e.g., ruamel.yaml output).
+
+        Args:
+            data: Dictionary from yaml.load(), typically a CommentedMap.
+
+        Returns:
+            GitLabCIConfig instance with typed fields.
+        """
+        # Make a copy to avoid mutating the original
+        data_copy = dict(data)
+        raw_include = data_copy.pop("include", None)
+        return cls(include=cast(GitLabIncludeValueRaw | None, raw_include), extra=data_copy)
+
+    @classmethod
+    def load(cls, path: Path) -> GitLabCIConfig | None:
+        """Load GitLab CI config from a YAML file.
+
+        Args:
+            path: Path to .gitlab-ci.yml file.
+
+        Returns:
+            GitLabCIConfig if file contains valid YAML dict, None otherwise.
+        """
+        if not path.exists():
+            return None
+
+        yaml = YAML()
+        content = path.read_text(encoding="utf-8")
+        data = yaml.load(content)
+
+        if isinstance(data, dict):
+            return cls.from_dict(data)
+        return None
+
+    @classmethod
+    def add_include_and_save(cls, path: Path, include_entry: dict[str, str]) -> bool:
+        """Add an include entry to a GitLab CI file and save.
+
+        Preserves existing YAML formatting and comments.
+
+        Args:
+            path: Path to .gitlab-ci.yml file.
+            include_entry: Include entry to add (e.g., {"local": "path/to/file.yml"}).
+
+        Returns:
+            True if successfully modified and saved, False if file structure invalid.
+        """
+        from io import StringIO
+
+        yaml = YAML()
+        yaml.preserve_quotes = True
+
+        content = path.read_text(encoding="utf-8")
+        raw_config = yaml.load(content)
+
+        if not isinstance(raw_config, dict):
+            return False
+
+        config = cls.from_dict(raw_config)
+        raw_config["include"] = [*config.include_list, include_entry]
+
+        stream = StringIO()
+        yaml.dump(raw_config, stream)
+        _ = path.write_text(stream.getvalue(), encoding="utf-8")
+        return True
+
+    @property
+    def include_list(self) -> list[GitLabIncludeEntryRaw]:
+        """Get include as a list, normalizing single entries.
+
+        Returns:
+            List of include entries (empty if no includes).
+        """
+        if self.include is None:
+            return []
+        if isinstance(self.include, list):
+            return self.include
+        return [self.include]

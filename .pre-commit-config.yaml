@@ -8,11 +8,10 @@ repos:
       - id: mkapidocs-regen
         name: Regenerate documentation
         description: Run mkapidocs setup to keep generated content in sync with code changes
-        entry: uv run mkapidocs setup .
+        entry: uv run mkapidocs setup . --quiet
         language: system
         files: ^(.*\.py|pyproject\.toml|mkdocs\.yml)$
         pass_filenames: false
-        verbose: true
 
   # Standard pre-commit hooks managed by mxr
 
@@ -86,15 +85,9 @@ repos:
   # Local hooks for type checking
   - repo: local
     hooks:
-      - id: install-pep723-deps
-        name: Install PEP 723 script dependencies
-        entry: bash -c 'for file in "$@"; do if head -20 "$file" | grep -q "# /// script"; then uv export --script "$file" | uv pip install --quiet -r -; fi; done' --
-        language: system
-        types: [python]
-        pass_filenames: true
       - id: mypy
         name: mypy
-        entry: uv run --no-sync mypy
+        entry: uv run --no-sync pep723-loader mypy
         language: system
         types: [python]
         pass_filenames: true
@@ -102,7 +95,7 @@ repos:
 
       - id: pyright
         name: basedpyright
-        entry: uv run --no-sync basedpyright
+        entry: uv run --no-sync pep723-loader basedpyright
         language: system
         types: [python]
         pass_filenames: true

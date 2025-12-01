@@ -10,39 +10,20 @@ Tests cover:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
+from mkapidocs.generator import (
+    detect_c_code,
+    detect_github_url_base,
+    detect_private_registry,
+    detect_typer_cli_module,
+    detect_typer_dependency,
+)
+from mkapidocs.models import ProjectConfig, PyprojectConfig
 from pytest_mock import MockerFixture
 
-
-# Module is imported in conftest.py with session scope
-# Access functions directly from sys.modules after conftest runs
-def detect_github_url_base(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.detect_github_url_base with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].detect_github_url_base(*args, **kwargs)
-
-
-def detect_c_code(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.detect_c_code with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].detect_c_code(*args, **kwargs)
-
-
-def detect_typer_dependency(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.detect_typer_dependency with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].detect_typer_dependency(*args, **kwargs)
-
-
-def detect_typer_cli_module(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.detect_typer_cli_module with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].detect_typer_cli_module(*args, **kwargs)
-
-
-def detect_private_registry(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Wrapper for mkapidocs.detect_private_registry with deferred module lookup."""  # noqa: DOC201
-    return sys.modules["mkapidocs"].detect_private_registry(*args, **kwargs)
+# Wrappers removed, using direct imports
 
 
 class TestGitHubURLDetection:
@@ -52,7 +33,7 @@ class TestGitHubURLDetection:
     to determine the GitHub Pages site URL.
     """
 
-    def test_detect_github_url_ssh_format(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_detect_github_url_ssh_format(self, mock_repo_path: Path) -> None:
         """Test GitHub URL detection with SSH remote format.
 
         Tests: detect_github_url_base parses SSH git URLs correctly
@@ -68,9 +49,10 @@ class TestGitHubURLDetection:
         git_dir.mkdir()
         git_config = git_dir / "config"
         git_config.write_text(
-            '[remote "origin"]\n'
-            "\turl = git@github.com:test-owner/test-repo.git\n"
-            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+            """[remote "origin"]
+\turl = git@github.com:test-owner/test-repo.git
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+"""
         )
 
         # Act
@@ -79,7 +61,7 @@ class TestGitHubURLDetection:
         # Assert
         assert result == "https://test-owner.github.io/test-repo/"
 
-    def test_detect_github_url_https_format(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_detect_github_url_https_format(self, mock_repo_path: Path) -> None:
         """Test GitHub URL detection with HTTPS remote format.
 
         Tests: detect_github_url_base parses HTTPS git URLs correctly
@@ -95,9 +77,10 @@ class TestGitHubURLDetection:
         git_dir.mkdir()
         git_config = git_dir / "config"
         git_config.write_text(
-            '[remote "origin"]\n'
-            "\turl = https://github.com/test-owner/test-repo.git\n"
-            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+            """[remote "origin"]
+\turl = https://github.com/test-owner/test-repo.git
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+"""
         )
 
         # Act
@@ -106,7 +89,7 @@ class TestGitHubURLDetection:
         # Assert
         assert result == "https://test-owner.github.io/test-repo/"
 
-    def test_detect_github_url_ssh_without_git_suffix(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_detect_github_url_ssh_without_git_suffix(self, mock_repo_path: Path) -> None:
         """Test GitHub URL detection with SSH format without .git suffix.
 
         Tests: detect_github_url_base handles URLs without .git extension
@@ -122,9 +105,10 @@ class TestGitHubURLDetection:
         git_dir.mkdir()
         git_config = git_dir / "config"
         git_config.write_text(
-            '[remote "origin"]\n'
-            "\turl = git@github.com:test-owner/test-repo\n"
-            "\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+            """[remote "origin"]
+\turl = git@github.com:test-owner/test-repo
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+"""
         )
 
         # Act
@@ -295,7 +279,7 @@ class TestTyperDependencyDetection:
     dependencies for the Typer package.
     """
 
-    def test_detect_typer_dependency_present(self, mock_pyproject_with_typer: dict[str, Any]) -> None:
+    def test_detect_typer_dependency_present(self, mock_pyproject_with_typer: PyprojectConfig) -> None:
         """Test Typer dependency detection when typer in dependencies.
 
         Tests: detect_typer_dependency returns True when typer listed
@@ -311,7 +295,7 @@ class TestTyperDependencyDetection:
         # Assert
         assert result is True
 
-    def test_detect_typer_dependency_absent(self, parsed_pyproject: dict[str, Any]) -> None:
+    def test_detect_typer_dependency_absent(self, parsed_pyproject: PyprojectConfig) -> None:
         """Test Typer dependency detection when typer not in dependencies.
 
         Tests: detect_typer_dependency returns False without typer
@@ -336,7 +320,7 @@ class TestTyperDependencyDetection:
 
         """
         # Arrange
-        pyproject = {"project": {"name": "test"}}
+        pyproject = PyprojectConfig(project=ProjectConfig(name="test"))
 
         # Act
         result = detect_typer_dependency(pyproject)
@@ -353,7 +337,7 @@ class TestTyperDependencyDetection:
 
         """
         # Arrange
-        pyproject = {"project": {"dependencies": ["TYPER>=0.9.0", "click>=8.0"]}}
+        pyproject = PyprojectConfig(project=ProjectConfig(name="test", dependencies=["TYPER>=0.9.0", "click>=8.0"]))
 
         # Act
         result = detect_typer_dependency(pyproject)
@@ -381,7 +365,7 @@ class TestTyperDependencyDetection:
             dependency_string: Various typer dependency formats
         """
         # Arrange
-        pyproject = {"project": {"dependencies": [dependency_string]}}
+        pyproject = PyprojectConfig(project=ProjectConfig(name="test", dependencies=[dependency_string]))
 
         # Act
         result = detect_typer_dependency(pyproject)
@@ -398,7 +382,7 @@ class TestTyperCLIModuleDetection:
     """
 
     def test_detect_typer_cli_module_found(
-        self, mock_typer_cli_repo: Path, mock_pyproject_with_typer: dict[str, Any]
+        self, mock_typer_cli_repo: Path, mock_pyproject_with_typer: PyprojectConfig
     ) -> None:
         """Test Typer CLI module detection when CLI module exists.
 
@@ -417,7 +401,7 @@ class TestTyperCLIModuleDetection:
         assert result == ["test_cli_project.cli"]
 
     def test_detect_typer_cli_module_no_package(
-        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+        self, mock_repo_path: Path, mock_pyproject_with_typer: PyprojectConfig
     ) -> None:
         """Test Typer CLI module detection when package directory missing.
 
@@ -436,7 +420,7 @@ class TestTyperCLIModuleDetection:
         assert result == []
 
     def test_detect_typer_cli_module_no_typer_import(
-        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+        self, mock_repo_path: Path, mock_pyproject_with_typer: PyprojectConfig
     ) -> None:
         """Test Typer CLI module detection when Python files lack typer import.
 
@@ -461,7 +445,7 @@ class TestTyperCLIModuleDetection:
         assert result == []
 
     def test_detect_typer_cli_module_skips_test_files(
-        self, mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]
+        self, mock_repo_path: Path, mock_pyproject_with_typer: PyprojectConfig
     ) -> None:
         """Test Typer CLI module detection skips test files.
 
@@ -497,7 +481,7 @@ class TestPrivateRegistryDetection:
     private PyPI registry configuration in tool.uv.index.
     """
 
-    def test_detect_private_registry_present(self, mock_pyproject_with_private_registry: dict[str, Any]) -> None:
+    def test_detect_private_registry_present(self, mock_pyproject_with_private_registry: PyprojectConfig) -> None:
         """Test private registry detection when configured.
 
         Tests: detect_private_registry returns True and URL when configured
@@ -514,7 +498,7 @@ class TestPrivateRegistryDetection:
         assert is_private is True
         assert registry_url == "https://private.pypi.org/simple"
 
-    def test_detect_private_registry_absent(self, parsed_pyproject: dict[str, Any]) -> None:
+    def test_detect_private_registry_absent(self, parsed_pyproject: PyprojectConfig) -> None:
         """Test private registry detection when not configured.
 
         Tests: detect_private_registry returns False and None without config
@@ -540,7 +524,8 @@ class TestPrivateRegistryDetection:
 
         """
         # Arrange
-        pyproject: dict[str, Any] = {"tool": {"uv": {"index": []}}}
+        # Arrange
+        pyproject = PyprojectConfig(project=ProjectConfig(name="test"), tool={"uv": {"index": []}})
 
         # Act
         is_private, registry_url = detect_private_registry(pyproject)
@@ -549,16 +534,16 @@ class TestPrivateRegistryDetection:
         assert is_private is False
         assert registry_url is None
 
-    def test_detect_private_registry_no_url_in_index(self) -> None:
-        """Test private registry detection when index lacks url key.
+    def test_detect_private_registry_no_tool_section(self) -> None:
+        """Test private registry detection when tool section uses defaults.
 
-        Tests: detect_private_registry handles malformed index config
-        How: Pass index dict without "url" key
-        Why: Should handle invalid configuration gracefully
+        Tests: detect_private_registry handles default tool config
+        How: Pass pyproject without explicit tool configuration
+        Why: Should handle projects without uv configuration gracefully
 
         """
         # Arrange
-        pyproject: dict[str, Any] = {"tool": {"uv": {"index": [{"name": "private"}]}}}
+        pyproject = PyprojectConfig(project=ProjectConfig(name="test"))
 
         # Act
         is_private, registry_url = detect_private_registry(pyproject)

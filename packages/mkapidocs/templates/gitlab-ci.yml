@@ -1,0 +1,10 @@
+pages:
+  stage: deploy
+  image: ghcr.io/astral-sh/uv:python3.11
+  script:
+    - uv run mkapidocs build . --strict
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
