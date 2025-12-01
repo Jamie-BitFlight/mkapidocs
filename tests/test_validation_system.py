@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any
 
+from mkapidocs.models import TomlTable
 from mkapidocs.validators import DoxygenInstaller, ProjectValidator, SystemValidator, ValidationResult
 from pytest_mock import MockerFixture
 
@@ -840,7 +840,7 @@ class TestProjectValidator:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        mock_pyproject: dict[str, Any] = {"project": {"dependencies": []}}  # pyright: ignore[reportExplicitAny]
+        mock_pyproject: TomlTable = {"project": {"dependencies": []}}
         _ = mocker.patch("mkapidocs.generator.read_pyproject", return_value=mock_pyproject)
         _ = mocker.patch("mkapidocs.generator.detect_typer_dependency", return_value=False)
         validator = ProjectValidator(mock_repo_path)

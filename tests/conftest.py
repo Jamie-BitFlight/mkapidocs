@@ -10,10 +10,9 @@ import sys
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
 
 import pytest
-from mkapidocs.models import PyprojectConfig
+from mkapidocs.models import PyprojectConfig, TomlTable
 from pytest_mock import MockerFixture
 
 
@@ -236,7 +235,7 @@ void helper_function();
 
 
 @pytest.fixture
-def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: dict[str, Any]) -> Path:  # pyright: ignore[reportExplicitAny]
+def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: TomlTable) -> Path:
     """Create mock repository with Typer CLI application.
 
     Tests: Typer CLI module detection
@@ -288,8 +287,8 @@ def parsed_pyproject() -> PyprojectConfig:
     Returns:
         Minimal pyproject.toml configuration dictionary
     """
-    data = {  # pyright: ignore[reportUnknownVariableType]
+    data: TomlTable = {
         "project": {"name": "test-project", "version": "0.1.0", "description": "Test project", "dependencies": []},
         "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
     }
-    return PyprojectConfig.from_dict(cast(dict[str, Any], data))  # pyright: ignore[reportExplicitAny]
+    return PyprojectConfig.from_dict(data)
