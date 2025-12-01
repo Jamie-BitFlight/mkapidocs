@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 from shutil import which
 from typing import cast
@@ -106,8 +105,6 @@ def _get_mkdocs_plugins() -> list[str]:
     return [
         "mkdocs",
         "mkdocs-material",
-        "mkdocs-gen-files",
-        "mkdocs-literate-nav",
         "mkdocstrings[python]",
         "mkdocs-typer2",
         "mkdoxy",
@@ -138,15 +135,6 @@ def build_docs(target_path: Path, strict: bool = False, output_dir: Path | None 
     if not mkdocs_yml.exists():
         msg = f"{MKDOCS_FILE} not found in {target_path}"
         raise FileNotFoundError(msg)
-
-    # Generate gen_ref_pages.py just-in-time for this build
-    gen_ref_script = target_path / "docs" / "generated" / "gen_ref_pages.py"
-    gen_ref_script.parent.mkdir(parents=True, exist_ok=True)
-
-    # Read script content from resources using modern files() API
-    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
-
-    _ = gen_ref_script.write_text(script_content)
 
     # Get source paths and add to PYTHONPATH
     env = os.environ.copy()
@@ -277,15 +265,6 @@ def serve_docs(target_path: Path, host: str = "127.0.0.1", port: int = 8000) -> 
     if not mkdocs_yml.exists():
         msg = f"{MKDOCS_FILE} not found in {target_path}"
         raise FileNotFoundError(msg)
-
-    # Generate gen_ref_pages.py just-in-time for serving
-    gen_ref_script = target_path / "docs" / "generated" / "gen_ref_pages.py"
-    gen_ref_script.parent.mkdir(parents=True, exist_ok=True)
-
-    # Read script content from resources using modern files() API
-    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
-
-    _ = gen_ref_script.write_text(script_content)
 
     # Get source paths and add to PYTHONPATH
     env = os.environ.copy()

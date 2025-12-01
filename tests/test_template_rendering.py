@@ -15,7 +15,6 @@ from pathlib import Path
 
 from mkapidocs.generator import (
     create_api_reference,
-    create_gen_files_script,
     create_generated_content,
     create_github_actions,
     create_index_page,
@@ -94,8 +93,7 @@ class TestCreateMkdocsConfig:
 
         # Verify base plugins are present (check string content for plugin names)
         assert "search" in rendered_content
-        assert "gen-files" in rendered_content
-        assert "literate-nav" in rendered_content
+
         assert "mkdocstrings" in rendered_content
         assert "mermaid2" in rendered_content
         assert "termynal" in rendered_content
@@ -235,7 +233,6 @@ class TestCreateMkdocsConfig:
 
         # Verify base plugins still present
         assert "mkdocstrings" in rendered_content
-        assert "gen-files" in rendered_content
 
     def test_preserves_existing_config_on_update(self, mock_repo_path: Path) -> None:
         """Test mkdocs.yml merge preserves user customizations when file exists.
@@ -733,70 +730,6 @@ class TestCreateAPIReference:
         # Assert
         cli_api_path = mock_repo_path / "docs" / "generated" / "cli-api.md"
         assert not cli_api_path.exists()
-
-
-class TestCreateGenFilesScript:
-    """Test suite for gen_ref_pages.py script generation.
-
-    Tests the create_gen_files_script function which creates the mkdocs-gen-files
-    plugin script for automatic API reference generation.
-    """
-
-    def test_creates_gen_ref_pages_script(self, mock_repo_path: Path) -> None:
-        """Test gen_ref_pages.py script creation.
-
-        Tests: create_gen_files_script() creates gen_ref_pages.py
-        How: Call function, verify file exists at expected path
-        Why: mkdocs-gen-files plugin requires script to generate references
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange & Act
-        create_gen_files_script(repo_path=mock_repo_path)
-
-        # Assert
-        script_path = mock_repo_path / "docs" / "generated" / "gen_ref_pages.py"
-        assert script_path.exists()
-
-    def test_script_contains_valid_python(self, mock_repo_path: Path) -> None:
-        """Test gen_ref_pages.py contains valid Python syntax.
-
-        Tests: Generated script is valid Python
-        How: Read file, attempt to compile as Python code
-        Why: Script must execute during MkDocs build
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange & Act
-        create_gen_files_script(repo_path=mock_repo_path)
-
-        # Assert
-        script_path = mock_repo_path / "docs" / "generated" / "gen_ref_pages.py"
-        content = script_path.read_text()
-
-        # Verify Python compiles without syntax errors
-        compile(content, str(script_path), "exec")
-
-    def test_script_uses_mkdocs_gen_files(self, mock_repo_path: Path) -> None:
-        """Test gen_ref_pages.py imports mkdocs_gen_files module.
-
-        Tests: Script uses mkdocs-gen-files plugin API
-        How: Verify import statement in generated script
-        Why: Script needs mkdocs_gen_files to create virtual documentation files
-
-        Args:
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange & Act
-        create_gen_files_script(repo_path=mock_repo_path)
-
-        # Assert
-        script_path = mock_repo_path / "docs" / "generated" / "gen_ref_pages.py"
-        content = script_path.read_text()
-
-        assert "import mkdocs_gen_files" in content
 
 
 class TestCreateGeneratedContent:

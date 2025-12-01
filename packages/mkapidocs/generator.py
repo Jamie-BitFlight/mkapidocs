@@ -16,7 +16,6 @@ from jinja2 import Environment
 from rich.console import Console
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
-from tomlkit import exceptions
 
 from mkapidocs.models import (
     CIProvider,
@@ -26,7 +25,6 @@ from mkapidocs.models import (
     MessageType,
     PyprojectConfig,
     TomlTable,
-    TomlValue,
 )
 from mkapidocs.templates import (
     C_API_MD_TEMPLATE,
@@ -1147,103 +1145,41 @@ def create_supporting_docs(
         console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
 
 
-def _ensure_mkapidocs_dependency(config: TomlTable, dep_spec: str, pyproject_path: Path, repo_path: Path) -> None:
-    """Ensure mkapidocs is in dependency-groups."""
-    # Initialize dependency-groups if it doesn't exist
-    if "dependency-groups" not in config:
-        config["dependency-groups"] = {}
-
-    # Get dependency-groups as a properly typed dict
-    dep_groups_raw = config.get("dependency-groups")
-    if not isinstance(dep_groups_raw, dict):
-        dep_groups: TomlTable = {}
-        config["dependency-groups"] = dep_groups
-    else:
-        dep_groups = dep_groups_raw
-
-    # Initialize dev group if it doesn't exist
-    if "dev" not in dep_groups:
-        dep_groups["dev"] = []
-
-    # Convert to list if it's not already
-    raw_dev_deps = dep_groups.get("dev")
-    if not isinstance(raw_dev_deps, list):
-        dev_deps: list[str] = []
-        dep_groups["dev"] = dev_deps
-    else:
-        # Cast to known type and filter to strings
-        typed_list = cast(list[TomlValue], raw_dev_deps)
-        dev_deps = [str(dep) for dep in typed_list if isinstance(dep, str)]
-
-    # Check if mkapidocs is already in dependencies
-    has_mkapidocs = any(dep.startswith("mkapidocs") or "mkapidocs" in dep for dep in dev_deps)
-
-    if not has_mkapidocs:
-        # Add mkapidocs with local path
-        new_dep = f"mkapidocs @ file://{dep_spec}"
-        dev_deps.append(new_dep)
-        # Update config with the new dependency list
-        dep_groups["dev"] = dev_deps
-
-        # Write updated pyproject.toml
-        with open(pyproject_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config, f)
-
-        console.print(f"[green]:white_check_mark: Added mkapidocs to {repo_path}/pyproject.toml[/green]")
-
-        # Run uv sync to install mkapidocs in target project
-        if uv_cmd := which("uv"):
-            console.print("[blue]Installing mkapidocs in target project environment...[/blue]")
-            result = subprocess.run([uv_cmd, "sync"], cwd=repo_path, capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                console.print("[green]:white_check_mark: Successfully installed mkapidocs in target project[/green]")
-            else:
-                console.print(f"[yellow]:warning: Failed to sync dependencies: {result.stderr}[/yellow]")
-        else:
-            console.print("[yellow]:warning: uv command not found, skipping sync[/yellow]")
-    else:
-        console.print("[blue]:information: mkapidocs already in target project dependencies[/blue]")
-
-
 def add_mkapidocs_to_target_project(repo_path: Path) -> None:
-    """Add mkapidocs to target project's dev dependencies.
+    """Install mkapidocs in target project's environment.
 
-    Adds mkapidocs to the target project's [dependency-groups] dev section
-    and runs uv sync to install it in the project's environment.
+    In dev mode: uses 'uv pip install -e' to avoid modifying pyproject.toml.
+    In installed mode: uses 'uv add --dev mkapidocs' to add as proper dependency.
 
     Args:
         repo_path: Path to target repository.
     """
-    pyproject_path = repo_path / "pyproject.toml"
-    if not pyproject_path.exists():
-        console.print("[yellow]:warning: No pyproject.toml found, skipping mkapidocs installation[/yellow]")
+    uv_cmd = which("uv")
+    if not uv_cmd:
         return
 
-    try:
-        # Read current pyproject.toml
-        with open(pyproject_path, encoding="utf-8") as f:
-            config = tomlkit.load(f)
+    # Check if mkapidocs is already installed in target environment
+    result = subprocess.run(
+        [uv_cmd, "pip", "show", "mkapidocs"], cwd=repo_path, capture_output=True, text=True, check=False
+    )
+    if result.returncode == 0:
+        return  # Already installed
 
-        # Get the path to mkapidocs (this package)
-        # First try to find it in the current environment
-        mkapidocs_path = Path(__file__).parent.parent.parent
+    # Get the path to mkapidocs source (this package)
+    mkapidocs_path = Path(__file__).parent.parent.parent
 
-        # Check if we're in a development environment or installed
-        if (mkapidocs_path / "pyproject.toml").exists():
-            # Development mode - use local path
-            dep_spec = str(mkapidocs_path.absolute())
-            _ensure_mkapidocs_dependency(config, dep_spec, pyproject_path, repo_path)
-        else:
-            # Installed mode - will need to use git URL or PyPI when available
-            # For now, skip if not in dev mode
-            console.print(
-                "[yellow]:warning: mkapidocs not in development mode, skipping installation in target[/yellow]"
-            )
-
-    except (OSError, exceptions.ParseError):
-        console.print("[red]:warning: Failed to read pyproject.toml[/red]")
-    except Exception as e:
-        console.print(f"[yellow]:warning: Failed to add mkapidocs to target project: {e}[/yellow]")
+    # Check if we're in development mode (running from source)
+    if (mkapidocs_path / "pyproject.toml").exists():
+        # Dev mode: install editable without modifying target's pyproject.toml
+        subprocess.run(
+            [uv_cmd, "pip", "install", "-e", str(mkapidocs_path.absolute())],
+            cwd=repo_path,
+            capture_output=True,
+            check=False,
+        )
+    else:
+        # Installed mode: add as proper dev dependency
+        subprocess.run([uv_cmd, "add", "--dev", "mkapidocs"], cwd=repo_path, capture_output=True, check=False)
 
 
 def _get_project_info(pyproject: PyprojectConfig) -> tuple[str, str, str]:

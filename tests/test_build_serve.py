@@ -193,38 +193,6 @@ class TestBuildDocs:
         # Assert
         assert exit_code == 1
 
-    def test_build_docs_creates_gen_ref_pages_script(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test build creates gen_ref_pages.py in docs directory.
-
-        Tests: build_docs() generates required scripts
-        How: Mock subprocess, verify gen_ref_pages.py written
-        Why: Script must exist before mkdocs build runs
-
-        Args:
-            mocker: pytest-mock fixture for mocking
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
-        docs_dir = mock_repo_path / "docs"
-        docs_dir.mkdir()
-
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mocker.patch("subprocess.run", return_value=mock_result)
-
-        # Act
-        build_docs(mock_repo_path)
-
-        # Assert
-        gen_ref_script = docs_dir / "generated" / "gen_ref_pages.py"
-        assert gen_ref_script.exists()
-        content = gen_ref_script.read_text()
-        assert "mkdocs-gen-files" in content or "gen_files" in content
-
     def test_build_docs_includes_all_required_plugins(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
         """Test build command includes all mkdocs plugins via --with flags.
 
@@ -453,36 +421,6 @@ class TestServeDocs:
 
         # Assert
         assert exit_code == 1
-
-    def test_serve_docs_creates_gen_ref_pages_script(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
-        """Test serve creates gen_ref_pages.py in docs directory.
-
-        Tests: serve_docs() generates required scripts
-        How: Mock subprocess, verify gen_ref_pages.py written
-        Why: Script must exist before mkdocs serve runs
-
-        Args:
-            mocker: pytest-mock fixture for mocking
-            mock_repo_path: Temporary repository directory
-        """
-        # Arrange
-        (mock_repo_path / "mkdocs.yml").write_text("site_name: Test\n")
-        docs_dir = mock_repo_path / "docs"
-        docs_dir.mkdir()
-
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.is_running_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.builder.which", return_value=ACTUAL_UVX_PATH or "/usr/local/bin/uvx")
-        mock_result = mocker.MagicMock()
-        mock_result.returncode = 0
-        mocker.patch("subprocess.run", return_value=mock_result)
-
-        # Act
-        serve_docs(mock_repo_path)
-
-        # Assert
-        gen_ref_script = docs_dir / "generated" / "gen_ref_pages.py"
-        assert gen_ref_script.exists()
 
 
 class TestIsMkapidocsInTargetEnv:
