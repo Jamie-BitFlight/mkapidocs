@@ -162,6 +162,20 @@ reportAny = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
 reportPrivateUsage = false
+include = [".", "tests"]
+extraPaths = ["tests", "."]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    ".*",
+    "__*",
+    "**/typings",
+    "demo",
+]
+ignore = ["**/typings"]
+venvPath = "."
+venv = ".venv"
+
 
 [tool.pytest.ini_options]
 addopts = ["--cov=packages/mkapidocs", "--cov-report=term-missing", "-v"]
