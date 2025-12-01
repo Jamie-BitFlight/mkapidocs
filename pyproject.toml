@@ -162,16 +162,10 @@ reportAny = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
 reportPrivateUsage = false
-include = [".", "tests"]
+typeCheckingMode = "standard"
+include = ["packages", "tests"]
 extraPaths = ["tests", "."]
-exclude = [
-    "**/node_modules",
-    "**/__pycache__",
-    ".*",
-    "__*",
-    "**/typings",
-    "demo",
-]
+exclude = ["**/node_modules", "**/__pycache__", "**/typings", "demo"]
 ignore = ["**/typings"]
 venvPath = "."
 venv = ".venv"
