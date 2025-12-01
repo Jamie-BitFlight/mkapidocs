@@ -32,11 +32,7 @@ theme:
 
 plugins:
   - search
-  - gen-files:
-      scripts:
-        - docs/generated/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
+
   - mkdocstrings:
       handlers:
         python:
@@ -101,4 +97,3 @@ nav:
 {% endfor %}
 {% endif %}
 {% endif %}
-  - Repository Files: repository/SUMMARY.md

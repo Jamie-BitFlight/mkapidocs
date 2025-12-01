@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 from contextlib import suppress
-from importlib.resources import files
 from pathlib import Path
 from shutil import which
 from typing import cast
@@ -963,21 +962,6 @@ def create_api_reference(
             _ = (generated_dir / filename).write_text(cli_content)
 
 
-def create_gen_files_script(repo_path: Path) -> None:
-    """Create gen_ref_pages.py script for mkdocs-gen-files plugin.
-
-    Args:
-        repo_path: Path to repository.
-    """
-    target_script = repo_path / "docs" / "generated" / "gen_ref_pages.py"
-    target_script.parent.mkdir(parents=True, exist_ok=True)
-
-    # Read script content from resources using modern files() API
-    script_content = files("mkapidocs.resources").joinpath("gen_ref_pages.py").read_text()
-
-    _ = target_script.write_text(script_content)
-
-
 def create_generated_content(
     repo_path: Path,
     project_name: str,
@@ -1438,7 +1422,7 @@ def setup_documentation(
     create_supporting_docs(
         repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, site_url, git_url=None
     )
-    create_gen_files_script(repo_path)
+
     update_gitignore(repo_path, provider)
 
     # Add mkapidocs to target project's dev dependencies
