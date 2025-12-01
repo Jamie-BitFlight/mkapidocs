@@ -894,7 +894,6 @@ def _ensure_deploy_stage(gitlab_ci_path: Path) -> None:
         config = GitLabCIConfig.load(gitlab_ci_path)
         if config:
             stages = config.stages or []
-            stages = [_strip_quotes(stage) for stage in stages]
             if "deploy" not in stages:
                 if GitLabCIConfig.add_stage_and_save(gitlab_ci_path, "deploy"):
                     console.print(f"[green]:white_check_mark: Added 'deploy' stage to {gitlab_ci_path.name}[/green]")
@@ -927,36 +926,32 @@ def create_gitlab_ci(repo_path: Path) -> None:
         console.print(f"[yellow]Skipping {pages_workflow_path.relative_to(repo_path)} (already exists)[/yellow]")
 
     # Check for existing include
-    include_exists = _check_existing_gitlab_ci(gitlab_ci_path)
+    if _check_existing_gitlab_ci(gitlab_ci_path):
+        return
 
-    if not include_exists:
-        include_entry: dict[str, str] = {"local": ".gitlab/workflows/pages.gitlab-ci.yml"}
+    include_entry: dict[str, str] = {"local": ".gitlab/workflows/pages.gitlab-ci.yml"}
 
-        if gitlab_ci_path.exists():
-            # Modify existing file
-            try:
-                if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
-                    console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
-                else:
-                    # Fallback to append if structure is weird
-                    with gitlab_ci_path.open("a", encoding="utf-8") as f:
-                        f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
-                    console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
-
-            except (YAMLError, OSError):
-                # Fallback to append
+    if gitlab_ci_path.exists():
+        # Modify existing file
+        try:
+            if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
+                console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
+            else:
+                # Fallback to append if structure is weird
                 with gitlab_ci_path.open("a", encoding="utf-8") as f:
                     f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
                 console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
-        else:
-            # Create new file
-            initial_content = "stages:\n  - deploy\n\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
-            _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
-            console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
-            return
 
-    # Check for deploy stage (run even if include exists)
-    _ensure_deploy_stage(gitlab_ci_path)
+        except (YAMLError, OSError):
+            # Fallback to append
+            with gitlab_ci_path.open("a", encoding="utf-8") as f:
+                f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+            console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+    else:
+        # Create new file
+        initial_content = "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+        _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
+        console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
 
 
 def create_index_page(
