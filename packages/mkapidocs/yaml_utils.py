@@ -16,8 +16,9 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
-from ruamel.yaml.scalarstring import LiteralScalarString
+from ruamel.yaml.scalarstring import LiteralScalarString, ScalarString
 from ruamel.yaml.util import load_yaml_guess_indent
 
 # Initialize Rich console
@@ -92,7 +93,7 @@ def load_yaml_preserve_format(path: Path) -> tuple[dict[str, object] | None, tup
 
     yaml = YAML()
     yaml.preserve_quotes = True
-    yaml.indent(mapping=indent_settings[0], sequence=indent_settings[1], offset=indent_settings[2])  # pyright: ignore[reportAttributeAccessIssue]
+    yaml.indent(mapping=indent_settings[0], sequence=indent_settings[1], offset=indent_settings[2])
 
     try:
         data = yaml.load(content)
@@ -119,39 +120,44 @@ def _detect_yaml_indentation(content: str) -> tuple[int, int, int]:
     _, indent, block_seq_indent = load_yaml_guess_indent(content)
 
     # load_yaml_guess_indent returns:
-    # - indent: the base indentation level (spaces per nesting level)
-    # - block_seq_indent: spaces before the dash in block sequences (the offset)
+    # - indent: total indentation for sequence item content (from parent to content after dash)
+    # - block_seq_indent: spaces before the dash (the offset from parent to dash)
     #
     # For yaml.indent(mapping=M, sequence=S, offset=O):
-    # - mapping: spaces per nesting level for mappings
-    # - sequence: spaces per nesting level for sequences
+    # - mapping: spaces per nesting level for mappings (parent key to child key)
+    # - sequence: spaces for content within sequence items (controls dict keys under list items)
     # - offset: spaces before the dash (relative to parent)
     #
     # Examples:
-    #   mkdocs.yml style (dash at same level as content):
+    #   mkdocs.yml style (offset=0, content at dash+2):
     #     theme:
     #       features:
-    #       - navigation.tabs
-    #     Returns indent=2, block_seq_indent=0 -> mapping=2, sequence=2, offset=0
+    #       - navigation.tabs      # dash at column 6, content at 8
+    #     Returns indent=2, block_seq_indent=0
+    #     -> mapping=2, sequence=2, offset=0
     #
-    #   gitlab-ci.yml style (dash indented under parent):
-    #     include:
-    #       - local: "file.yml"
-    #     Returns indent=4, block_seq_indent=2 -> mapping=2, sequence=2, offset=2
-    mapping_indent = indent if indent is not None else 2
+    #   python_picotool style (offset=2, content at dash+2):
+    #     palette:
+    #       - scheme: default      # dash at column 4, content at 6
+    #         primary: indigo      # continuation at column 6
+    #     Returns indent=4, block_seq_indent=2
+    #     -> mapping=2, sequence=4, offset=2
+    #
+    # The key insight: 'sequence' parameter controls indentation of dict keys
+    # WITHIN a list item, so it should be the full indent value (not mapping_indent)
     offset = block_seq_indent if block_seq_indent is not None else 0
+    sequence_indent = indent if indent is not None else 2
 
-    # When offset > 0, the actual mapping indent is (indent - offset)
-    # because indent includes the offset for sequence items
-    if offset > 0:
-        mapping_indent = indent - offset if indent else 2
-
-    sequence_indent = mapping_indent
+    # mapping_indent is the basic nesting level for dict keys
+    # When offset > 0, mapping = indent - offset
+    mapping_indent = indent - offset if offset > 0 and indent else indent if indent is not None else 2
 
     return (mapping_indent, sequence_indent, offset)
 
 
-def _preserve_scalar_style(value: object) -> object:
+def _preserve_scalar_style(
+    value: CommentedSeq | CommentedMap | ScalarString,
+) -> CommentedSeq | CommentedMap | ScalarString:
     r"""Convert values to appropriate ruamel.yaml scalar types to preserve formatting.
 
     Strings containing newlines are converted to LiteralScalarString so they
@@ -166,6 +172,43 @@ def _preserve_scalar_style(value: object) -> object:
     if isinstance(value, str) and "\n" in value:
         return LiteralScalarString(value)
     return value
+
+
+def _copy_comment_attributes(source: CommentedSeq | CommentedMap, target: CommentedSeq | CommentedMap) -> None:
+    """Copy ruamel.yaml comment attributes from source to target.
+
+    This preserves blank lines, comments, and formatting metadata when
+    replacing a value in a CommentedMap/CommentedSeq.
+
+    Args:
+        source: Original value with potential comment attributes
+        target: New value to copy comments to
+    """
+    # Both must have comment attributes (ca)
+    if not hasattr(source, "ca") or not hasattr(target, "ca"):
+        return
+
+    source_ca = source.ca
+    target_ca = target.ca
+
+    # Copy the main comment
+    if source_ca.comment:
+        target_ca.comment = source_ca.comment
+
+    # For sequences, recursively copy item comments if lengths match
+    if isinstance(source, list) and isinstance(target, list) and len(source) == len(target):
+        for _i, (src_item, tgt_item) in enumerate(zip(source, target, strict=False)):
+            _copy_comment_attributes(src_item, tgt_item)
+
+    # For dicts, copy comments for matching keys
+    if isinstance(source, dict) and isinstance(target, dict):
+        for key in source:
+            if key in target:
+                # Copy key-level comments
+                if key in source_ca.items and key not in target_ca.items:
+                    target_ca.items[key] = source_ca.items[key]
+                # Recursively copy nested value comments
+                _copy_comment_attributes(source[key], target[key])
 
 
 class CLIError(Exception):
@@ -234,9 +277,47 @@ def display_file_changes(file_path: Path, changes: list[FileChange]) -> None:
     console.print(table)
 
 
+def _is_template_owned_key(current_path: str, template_owned_keys: set[str]) -> bool:
+    """Check if a key path is controlled by the template.
+
+    Returns:
+        True if the current_path matches or is a child of any template-owned key.
+    """
+    return any(
+        current_path == owned_key or current_path.startswith(owned_key + ".") for owned_key in template_owned_keys
+    )
+
+
+def _handle_template_owned_key(
+    existing_yaml: dict[str, CommentedMap | CommentedSeq | ScalarString],
+    key: str,
+    current_path: str,
+    existing_value: CommentedSeq | CommentedMap | ScalarString | None,
+    template_value: CommentedSeq | CommentedMap | ScalarString,
+) -> FileChange | None:
+    """Handle a template-owned key update, preserving comments.
+
+    Returns:
+        FileChange record if value changed, None otherwise.
+    """
+    change = None
+    if existing_value != template_value:
+        if existing_value is None:
+            change = FileChange(key_path=current_path, action="added", new_value=str(template_value))
+        else:
+            change = FileChange(
+                key_path=current_path, action="updated", old_value=str(existing_value), new_value=str(template_value)
+            )
+    new_value = _preserve_scalar_style(template_value)
+    if existing_value is not None:
+        _copy_comment_attributes(existing_value, new_value)
+    existing_yaml[key] = new_value
+    return change
+
+
 def _merge_yaml_in_place(
-    existing_yaml: dict[str, object],
-    template_yaml: dict[str, object],
+    existing_yaml: dict[str, CommentedMap | CommentedSeq | ScalarString],
+    template_yaml: dict[str, CommentedMap | CommentedSeq | ScalarString],
     template_owned_keys: set[str],
     key_prefix: str = "",
     depth: int = 0,
@@ -261,7 +342,6 @@ def _merge_yaml_in_place(
     Raises:
         CLIError: If YAML structure conflicts prevent clean merge or depth exceeds limit
     """
-    # Check recursion depth to prevent stack overflow
     if depth > max_depth:
         msg = (
             f"YAML structure exceeds maximum nesting depth ({max_depth}). "
@@ -271,47 +351,26 @@ def _merge_yaml_in_place(
 
     changes: list[FileChange] = []
 
-    # Process template keys - add or update in existing_yaml
     for key, template_value in template_yaml.items():
         current_path = f"{key_prefix}.{key}" if key_prefix else key
         existing_value = existing_yaml.get(key)
 
-        # Check if this key is template-owned
-        is_template_owned = any(
-            current_path == owned_key or current_path.startswith(owned_key + ".") for owned_key in template_owned_keys
-        )
-
-        if is_template_owned:
-            # Template controls this key - always update
-            if existing_value != template_value:
-                if existing_value is None:
-                    changes.append(FileChange(key_path=current_path, action="added", new_value=str(template_value)))
-                else:
-                    changes.append(
-                        FileChange(
-                            key_path=current_path,
-                            action="updated",
-                            old_value=str(existing_value),
-                            new_value=str(template_value),
-                        )
-                    )
-            existing_yaml[key] = _preserve_scalar_style(template_value)
+        if _is_template_owned_key(current_path, template_owned_keys):
+            change = _handle_template_owned_key(existing_yaml, key, current_path, existing_value, template_value)
+            if change:
+                changes.append(change)
         elif isinstance(template_value, dict) and isinstance(existing_value, dict):
-            # Recursively merge nested dicts in place
-            existing_dict = cast(dict[str, object], existing_value)
-            template_dict = cast(dict[str, object], template_value)
+            existing_dict = existing_value
+            template_dict = template_value
             nested_changes = _merge_yaml_in_place(
                 existing_dict, template_dict, template_owned_keys, current_path, depth + 1, max_depth
             )
             changes.extend(nested_changes)
         elif existing_value is not None:
-            # User has customized this - preserve it (no modification needed)
-            existing_str = str(existing_value)
             changes.append(
-                FileChange(key_path=current_path, action="preserved", old_value=existing_str, new_value=None)
+                FileChange(key_path=current_path, action="preserved", old_value=str(existing_value), new_value=None)
             )
         else:
-            # New key from template, not template-owned - add it
             existing_yaml[key] = _preserve_scalar_style(template_value)
             template_str = str(template_value) if template_value is not None else ""
             changes.append(FileChange(key_path=current_path, action="added", new_value=template_str))
@@ -350,12 +409,11 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
     # Initialize ruamel.yaml with detected indentation
     yaml = YAML()
     yaml.preserve_quotes = True
-    yaml.indent(mapping=mapping_indent, sequence=sequence_indent, offset=offset)  # pyright: ignore[reportAttributeAccessIssue]
+    yaml.indent(mapping=mapping_indent, sequence=sequence_indent, offset=offset)
 
     try:
         # ruamel.yaml load returns CommentedMap which acts like a dict
-        existing_yaml_raw = yaml.load(existing_text)
-        existing_yaml: dict[str, object] = existing_yaml_raw if isinstance(existing_yaml_raw, dict) else {}
+        existing_yaml = yaml.load(existing_text)
     except YAMLError as e:
         msg = f"Failed to parse existing {existing_path.name}: {e}"
         raise CLIError(msg) from e
@@ -371,13 +429,16 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
     try:
         # Use safe_load for template as it's generated by us and we want standard dicts
         yaml_safe = YAML(typ="safe")
-        template_yaml_raw = yaml_safe.load(template_for_parsing)
-        template_yaml: dict[str, object] = template_yaml_raw if isinstance(template_yaml_raw, dict) else {}
+        template_yaml = yaml_safe.load(template_for_parsing)
     except YAMLError as e:
         msg = f"Failed to parse template YAML: {e}"
         raise CLIError(msg) from e
 
     # Define template-owned keys for mkdocs.yml
+    # Note: markdown_extensions and theme.palette are NOT template-owned because:
+    # 1. Users often customize them (colors, icons, custom_fences)
+    # 2. They can contain Python tags that can't be safely round-tripped
+    # 3. Replacing deeply nested structures loses comment/blank-line metadata
     template_owned_keys = {
         "plugins.gen-files.scripts",
         "plugins.search",
@@ -386,8 +447,6 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
         "plugins.termynal",
         "plugins.literate-nav",
         "theme.name",
-        "theme.palette",
-        "markdown_extensions",
     }
 
     # Add site_url and repo_url if template provides them
@@ -407,7 +466,58 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
     return merged_content, changes
 
 
-def append_to_yaml_list(file_path: Path, key: str, value: dict[str, str]) -> bool:
+def _extract_trailing_comment(existing_list: CommentedSeq, last_idx: int) -> CommentedSeq | None:
+    """Extract trailing comment from the last item of a CommentedSeq.
+
+    Handles two cases:
+    1. ScalarString - comment stored on list.ca.items[index]
+    2. CommentedMap - comment stored inside item.ca.items[key]
+
+    Returns:
+        The comment list [pre, side, post, end] if found, None otherwise.
+        Always returns a 4-element list for consistency.
+    """
+    # Case 1: ScalarString - comment stored on list.ca.items[index]
+    if isinstance(existing_list, CommentedSeq) and last_idx in existing_list.ca.items:
+        return CommentedSeq(existing_list.ca.items.pop(last_idx))
+
+    # Case 2: CommentedMap - comment stored inside item.ca.items[key]
+    last_item = existing_list[last_idx]
+    if isinstance(last_item, CommentedMap):
+        for item_key in list(last_item.ca.items.keys()):
+            comment_list = last_item.ca.items[item_key]
+            # Position 2 is post-value comment (where blank lines go)
+            if comment_list and len(comment_list) > 2 and comment_list[2] is not None:
+                trailing = comment_list[2]
+                comment_list[2] = None
+                # Return as full comment list for consistency
+                return CommentedSeq([None, None, trailing, None])
+    return None
+
+
+def _apply_trailing_comment(existing_list: CommentedSeq, new_idx: int, comment_list: list[object]) -> None:
+    """Apply a trailing comment to the new last item of a CommentedSeq.
+
+    Args:
+        existing_list: The CommentedSeq being modified
+        new_idx: Index of the newly appended item
+        comment_list: The 4-element comment list [pre, side, post, end]
+    """
+    new_item = existing_list[new_idx]
+    if isinstance(new_item, CommentedMap):
+        # For dict items, add post-value comment to the first key
+        trailing_token = comment_list[2] if len(comment_list) > 2 else None
+        for item_key in new_item:
+            if item_key not in new_item.ca.items:
+                new_item.ca.items[item_key] = [None, None, None, None]
+            new_item.ca.items[item_key][2] = trailing_token
+            break
+    elif isinstance(existing_list, CommentedSeq):
+        # For plain values, add full comment list to list's ca.items
+        existing_list.ca.items[new_idx] = comment_list
+
+
+def append_to_yaml_list(file_path: Path, key: str, value: str | dict[str, str]) -> bool:
     """Append a value to a list in a YAML file, preserving formatting.
 
     Modifies the file in place, preserving all existing formatting, comments,
@@ -416,7 +526,7 @@ def append_to_yaml_list(file_path: Path, key: str, value: dict[str, str]) -> boo
     Args:
         file_path: Path to the YAML file
         key: Top-level key containing the list (e.g., "include")
-        value: Dictionary value to append to the list
+        value: Value to append (string or dictionary)
 
     Returns:
         True if successfully modified and saved, False if file structure invalid
@@ -430,25 +540,32 @@ def append_to_yaml_list(file_path: Path, key: str, value: dict[str, str]) -> boo
 
     yaml = YAML()
     yaml.preserve_quotes = True
-    yaml.indent(mapping=mapping_indent, sequence=sequence_indent, offset=offset)  # pyright: ignore[reportAttributeAccessIssue]
+    yaml.indent(mapping=mapping_indent, sequence=sequence_indent, offset=offset)
 
     raw_config = yaml.load(content)
 
     if not isinstance(raw_config, dict):
         return False
 
+    # Prepare value for insertion
+    item_to_append = CommentedMap(value) if isinstance(value, dict) else value
+
     # Modify in place to preserve formatting metadata
     existing_value = raw_config.get(key)
 
     if existing_value is None:
         # No existing key - create new CommentedSeq
-        raw_config[key] = CommentedSeq([CommentedMap(value)])
-    elif isinstance(existing_value, list):
-        # Append to existing list in place (preserves CommentedSeq formatting)
-        existing_value.append(CommentedMap(value))
+        raw_config[key] = CommentedSeq([item_to_append])
+    elif isinstance(existing_value, CommentedSeq):
+        # Append to existing list, moving trailing blank line to new item
+        last_idx = len(existing_value) - 1
+        trailing_comment = _extract_trailing_comment(existing_value, last_idx)
+        existing_value.append(item_to_append)
+        if trailing_comment is not None:
+            _apply_trailing_comment(existing_value, len(existing_value) - 1, list(trailing_comment))
     else:
         # Single entry - convert to list while preserving the original entry
-        raw_config[key] = CommentedSeq([existing_value, CommentedMap(value)])
+        raw_config[key] = CommentedSeq([existing_value, item_to_append])
 
     stream = StringIO()
     yaml.dump(raw_config, stream)

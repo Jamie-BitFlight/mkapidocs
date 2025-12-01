@@ -36,7 +36,7 @@ from mkapidocs.templates import (
     MKDOCS_YML_TEMPLATE,
     PYTHON_API_MD_TEMPLATE,
 )
-from mkapidocs.yaml_utils import display_file_changes, merge_mkdocs_yaml
+from mkapidocs.yaml_utils import YAMLError, display_file_changes, merge_mkdocs_yaml
 
 # Initialize Rich console
 console = Console()
@@ -839,6 +839,18 @@ def create_github_actions(repo_path: Path) -> None:
         console.print(f"[green]:white_check_mark:[/green] Created {workflow_path.name}")
 
 
+def _strip_quotes(s: str) -> str:
+    """Strip leading and trailing quotes from a string.
+
+    Args:
+        s: String to strip quotes from.
+
+    Returns:
+        String with leading and trailing quotes removed.
+    """
+    return s.strip(" \"'")
+
+
 def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
     """Check if .gitlab-ci.yml already includes the pages workflow.
 
@@ -848,8 +860,6 @@ def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
     Returns:
         True if pages workflow include is found.
     """
-    from mkapidocs.yaml_utils import YAMLError
-
     with suppress(YAMLError, OSError):
         config = GitLabCIConfig.load(gitlab_ci_path)
         if config is None:
@@ -861,14 +871,37 @@ def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
 
         for inc in includes:
             if isinstance(inc, GitLabIncludeLocal):
-                if inc.local == ".gitlab/workflows/pages.gitlab-ci.yml":
+                if _strip_quotes(inc.local) == ".gitlab/workflows/pages.gitlab-ci.yml":
                     console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
                     return True
-            elif inc == ".gitlab/workflows/pages.gitlab-ci.yml":
+            elif isinstance(inc, str) and _strip_quotes(inc) == ".gitlab/workflows/pages.gitlab-ci.yml":
                 console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
                 return True
 
     return False
+
+
+def _ensure_deploy_stage(gitlab_ci_path: Path) -> None:
+    """Ensure 'deploy' stage exists in .gitlab-ci.yml.
+
+    Args:
+        gitlab_ci_path: Path to .gitlab-ci.yml.
+    """
+    if not gitlab_ci_path.exists():
+        return
+
+    with suppress(YAMLError, OSError):
+        config = GitLabCIConfig.load(gitlab_ci_path)
+        if config:
+            stages = config.stages or []
+            stages = [_strip_quotes(stage) for stage in stages]
+            if "deploy" not in stages:
+                if GitLabCIConfig.add_stage_and_save(gitlab_ci_path, "deploy"):
+                    console.print(f"[green]:white_check_mark: Added 'deploy' stage to {gitlab_ci_path.name}[/green]")
+                else:
+                    console.print(
+                        f"[yellow]Could not automatically add 'deploy' stage to {gitlab_ci_path.name}. Please add it manually.[/yellow]"
+                    )
 
 
 def create_gitlab_ci(repo_path: Path) -> None:
@@ -879,8 +912,6 @@ def create_gitlab_ci(repo_path: Path) -> None:
     Args:
         repo_path: Path to repository.
     """
-    from mkapidocs.yaml_utils import YAMLError
-
     gitlab_ci_path = repo_path / ".gitlab-ci.yml"
     workflows_dir = repo_path / ".gitlab" / "workflows"
     pages_workflow_path = workflows_dir / "pages.gitlab-ci.yml"
@@ -896,32 +927,36 @@ def create_gitlab_ci(repo_path: Path) -> None:
         console.print(f"[yellow]Skipping {pages_workflow_path.relative_to(repo_path)} (already exists)[/yellow]")
 
     # Check for existing include
-    if _check_existing_gitlab_ci(gitlab_ci_path):
-        return
+    include_exists = _check_existing_gitlab_ci(gitlab_ci_path)
 
-    include_entry: dict[str, str] = {"local": ".gitlab/workflows/pages.gitlab-ci.yml"}
+    if not include_exists:
+        include_entry: dict[str, str] = {"local": ".gitlab/workflows/pages.gitlab-ci.yml"}
 
-    if gitlab_ci_path.exists():
-        # Modify existing file
-        try:
-            if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
-                console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
-            else:
-                # Fallback to append if structure is weird
+        if gitlab_ci_path.exists():
+            # Modify existing file
+            try:
+                if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
+                    console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
+                else:
+                    # Fallback to append if structure is weird
+                    with gitlab_ci_path.open("a", encoding="utf-8") as f:
+                        f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+                    console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+
+            except (YAMLError, OSError):
+                # Fallback to append
                 with gitlab_ci_path.open("a", encoding="utf-8") as f:
                     f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
                 console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+        else:
+            # Create new file
+            initial_content = "stages:\n  - deploy\n\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+            _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
+            console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
+            return
 
-        except (YAMLError, OSError):
-            # Fallback to append
-            with gitlab_ci_path.open("a", encoding="utf-8") as f:
-                f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
-            console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
-    else:
-        # Create new file
-        initial_content = "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
-        _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
-        console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
+    # Check for deploy stage (run even if include exists)
+    _ensure_deploy_stage(gitlab_ci_path)
 
 
 def create_index_page(

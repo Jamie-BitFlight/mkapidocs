@@ -234,6 +234,7 @@ class GitLabCIConfig:
     """
 
     include: GitLabIncludeValueRaw | None = None
+    stages: list[str] | None = None
     extra: dict[str, object] = field(default_factory=dict)
 
     @classmethod
@@ -249,7 +250,13 @@ class GitLabCIConfig:
         # Make a copy to avoid mutating the original
         data_copy = dict(data)
         raw_include = data_copy.pop("include", None)
-        return cls(include=cast(GitLabIncludeValueRaw | None, raw_include), extra=data_copy)
+        raw_stages = data_copy.pop("stages", None)
+
+        stages: list[str] | None = None
+        if isinstance(raw_stages, list):
+            stages = [str(s) for s in raw_stages]
+
+        return cls(include=cast(GitLabIncludeValueRaw | None, raw_include), stages=stages, extra=data_copy)
 
     @classmethod
     def load(cls, path: Path) -> GitLabCIConfig | None:
@@ -284,6 +291,23 @@ class GitLabCIConfig:
         from mkapidocs.yaml_utils import append_to_yaml_list
 
         return append_to_yaml_list(path, "include", include_entry)
+
+    @classmethod
+    def add_stage_and_save(cls, path: Path, stage: str) -> bool:
+        """Add a stage to a GitLab CI file and save.
+
+        Preserves existing YAML formatting and comments.
+
+        Args:
+            path: Path to .gitlab-ci.yml file.
+            stage: Stage name to add (e.g., "deploy").
+
+        Returns:
+            True if successfully modified and saved, False if file structure invalid.
+        """
+        from mkapidocs.yaml_utils import append_to_yaml_list
+
+        return append_to_yaml_list(path, "stages", stage)
 
     @property
     def include_list(self) -> list[GitLabIncludeEntryRaw]:
