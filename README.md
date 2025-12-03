@@ -77,13 +77,29 @@ mkapidocs setup /path/to/your/project --provider github
 
 # Explicitly use GitLab CI
 mkapidocs setup /path/to/your/project --provider gitlab
+
+# Explicitly specify the Pages URL (useful for enterprise GitLab)
+mkapidocs setup /path/to/your/project --site-url https://mygroup.pages.gitlab.example.com/myproject
 ```
 
 **Provider Auto-Detection:**
 
-1. Checks git remote URL for `github.com` or `gitlab.com`
+1. Checks git remote URL for `github` or `gitlab` word in the domain (supports enterprise instances)
 2. Checks filesystem for `.gitlab-ci.yml`, `.gitlab/`, or `.github/` directories
 3. Fails with error if provider cannot be determined (use `--provider` flag)
+
+**Site URL Detection (GitLab):**
+
+For GitLab projects, mkapidocs can query the GitLab GraphQL API to get the actual Pages URL:
+
+```bash
+# Set GITLAB_TOKEN for API-based URL detection (requires read_api scope)
+GITLAB_TOKEN=glpat-xxx mkapidocs setup /path/to/project
+```
+
+- If Pages is deployed, the exact URL is retrieved from the API
+- If Pages is not yet deployed, a heuristic URL is used as a placeholder
+- Use `--site-url` to explicitly specify the URL and bypass all detection
 
 Example with real paths:
 
@@ -96,6 +112,9 @@ mkapidocs setup
 
 # Setup docs with explicit provider
 mkapidocs setup ~/repos/my-project --provider gitlab
+
+# Enterprise GitLab with explicit URL
+mkapidocs setup ~/repos/my-project --site-url https://team.pages.gitlab.corp.com/my-project
 ```
 
 **Important:** The `setup` command is non-destructive and safe to run multiple times:

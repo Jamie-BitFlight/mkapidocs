@@ -14,6 +14,7 @@ from typing import cast
 
 from rich import box
 from rich.console import Console
+from rich.measure import Measurement
 from rich.table import Table
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -232,14 +233,35 @@ class FileChange:
     new_value: str | None = None
 
 
+def _get_table_width(table: Table) -> int:
+    """Get the natural width of a table using a temporary wide console.
+
+    Args:
+        table: The Rich table to measure.
+
+    Returns:
+        The width in characters needed to display the table.
+    """
+    temp_console = Console(width=9999)
+    measurement = Measurement.get(temp_console, temp_console.options, table)
+    return int(measurement.maximum)
+
+
 def display_file_changes(file_path: Path, changes: list[FileChange]) -> None:
     """Display a Rich table showing changes made to a configuration file.
 
+    Only displays rows for actual changes (added/updated). Preserved rows
+    are filtered out. If no actual changes occurred, nothing is displayed.
+
     Args:
-        file_path: Path to the file that was modified
-        changes: List of FileChange records
+        file_path: Path to the file that was modified.
+        changes: List of FileChange records.
     """
-    if not changes:
+    # Filter to only actual changes (not preserved)
+    actual_changes = [c for c in changes if c.action in ("added", "updated")]
+
+    # No actual changes - nothing to display
+    if not actual_changes:
         return
 
     table = Table(
@@ -248,33 +270,26 @@ def display_file_changes(file_path: Path, changes: list[FileChange]) -> None:
 
     table.add_column("Key", style="cyan", no_wrap=True)
     table.add_column("Action", justify="center", no_wrap=True)
-    table.add_column("Old Value", style="dim")
-    table.add_column("New Value", style="green")
+    table.add_column("Old Value", style="dim", no_wrap=True)
+    table.add_column("New Value", style="green", no_wrap=True)
 
-    for change in changes:
+    for change in actual_changes:
         # Format action with emoji
         if change.action == "updated":
             action_display = "[green]:white_check_mark:[/green] Updated"
-        elif change.action == "added":
+        else:  # added
             action_display = "[green]:white_check_mark:[/green] Added"
-        elif change.action == "preserved":
-            action_display = "[yellow]:black_circle:[/yellow] Preserved"
-        else:
-            action_display = change.action
 
-        # Format values
+        # Format values - no truncation
         old_val = str(change.old_value) if change.old_value is not None else ""
         new_val = str(change.new_value) if change.new_value is not None else ""
 
-        # Truncate long values
-        if len(old_val) > 50:
-            old_val = old_val[:47] + "..."
-        if len(new_val) > 50:
-            new_val = new_val[:47] + "..."
-
         table.add_row(change.key_path, action_display, old_val, new_val)
 
-    console.print(table)
+    # Set table width to natural size and print
+    table_width = _get_table_width(table)
+    table.width = table_width
+    console.print(table, crop=False, overflow="ignore", no_wrap=True, soft_wrap=True)
 
 
 def _is_template_owned_key(current_path: str, template_owned_keys: set[str]) -> bool:

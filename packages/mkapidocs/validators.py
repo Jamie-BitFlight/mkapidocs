@@ -474,25 +474,31 @@ def _get_table_width(table: Table) -> int:
 def display_validation_results(results: list[ValidationResult], title: str = "Environment Validation") -> None:
     """Display validation results in a Rich formatted table.
 
+    Only displays the table if there are failures. If all checks pass,
+    nothing is displayed (silent success).
+
     Args:
-        results: List of validation results
-        title: Table title
+        results: List of validation results.
+        title: Table title.
     """
+    # Filter to only failures
+    failures = [r for r in results if not r.passed]
+
+    # All passed - silent success
+    if not failures:
+        return
+
     table = Table(title=f":mag: {title}", box=box.MINIMAL_DOUBLE_HEAD, title_style="bold cyan", show_header=True)
 
     table.add_column("Check", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center", no_wrap=True)
-    table.add_column("Details", style="dim")
-    table.add_column("Version/Info", style="magenta")
+    table.add_column("Details", style="dim", no_wrap=True)
+    table.add_column("Version/Info", style="magenta", no_wrap=True)
 
-    for result in results:
+    for result in failures:
         # Determine status icon using emoji tokens
-        if result.passed:
-            status = ":white_check_mark:"
-            status_style = "green"
-        else:
-            status = ":x:" if result.required else ":warning:"
-            status_style = "red" if result.required else "yellow"
+        status = ":x:" if result.required else ":warning:"
+        status_style = "red" if result.required else "yellow"
 
         # Format details with color
         details = f"[{status_style}]{result.message}[/{status_style}]"

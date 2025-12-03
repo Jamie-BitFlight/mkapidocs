@@ -79,7 +79,7 @@ All commands follow the pattern: `mkapidocs <command> [args]` or `uv run mkapido
 
 - `version` - Show version information
 - `info` - Display package metadata and installation details
-- `setup <path> [--provider {github|gitlab}]` - Set up MkDocs documentation for a Python project
+- `setup <path> [--provider {github|gitlab}] [--site-url URL]` - Set up MkDocs documentation for a Python project
 - `build <path> [--strict] [--output-dir PATH]` - Build documentation to static site
 - `serve <path> [--host HOST] [--port PORT]` - Serve documentation with live preview
 
@@ -89,13 +89,24 @@ The `setup` command configures MkDocs documentation and CI/CD workflows for your
 
 **Provider Auto-Detection:**
 
-1. First: Checks git remote URL for `github.com` or `gitlab.com`
+1. First: Checks git remote URL for `github` or `gitlab` word in the domain (supports enterprise instances)
 2. Second: Checks filesystem for `.gitlab-ci.yml`, `.gitlab/`, or `.github/` directories
 3. Third: Fails with error if provider cannot be determined
+
+**Site URL Detection (GitLab):**
+
+For GitLab projects, mkapidocs can query the GitLab GraphQL API to get the actual Pages URL:
+
+1. Set `GITLAB_TOKEN` or `CI_JOB_TOKEN` environment variable (requires `read_api` scope)
+2. If Pages is deployed, the exact URL is retrieved from the API
+3. If Pages is not yet deployed, a heuristic URL is used as a placeholder
 
 **Options:**
 
 - `--provider {github|gitlab}` - Explicitly specify CI/CD provider (bypasses auto-detection)
+- `--site-url URL` - Explicitly specify the Pages URL (bypasses all URL detection)
+- `--c-source-dirs DIRS` - Directories containing C/C++ source code (comma-separated)
+- `--quiet, -q` - Suppress output (only show errors)
 
 **Examples:**
 
@@ -108,6 +119,12 @@ mkapidocs setup /path/to/project --provider github
 
 # Explicitly use GitLab CI
 mkapidocs setup /path/to/project --provider gitlab
+
+# Explicitly specify the Pages URL (useful for enterprise GitLab)
+mkapidocs setup /path/to/project --site-url https://mygroup.pages.gitlab.example.com/myproject
+
+# With GITLAB_TOKEN for API-based URL detection
+GITLAB_TOKEN=glpat-xxx mkapidocs setup /path/to/project
 
 # Other commands
 mkapidocs version

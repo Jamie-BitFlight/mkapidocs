@@ -54,15 +54,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      - name: load pyproject.toml
+        run: uv pip install -q -r pyproject.toml
+
       - name: Run ruff
-        run: uvx ruff check .
+        run: uv run ruff check .
 
       - name: Run mypy
-        run: uvx mypy . || true
+        run: uv run mypy . || true
         continue-on-error: true
 
       - name: Run basedpyright
-        run: uvx basedpyright . || true
+        run: uv run basedpyright . || true
         continue-on-error: true
 
   release:
@@ -123,6 +126,9 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+
+      - name: load pyproject.toml
+        run: uv pip install -q -r pyproject.toml
 
       - name: Build documentation
         run: uv run mkapidocs build . --strict

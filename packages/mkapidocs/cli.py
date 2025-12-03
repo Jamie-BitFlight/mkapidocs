@@ -185,12 +185,21 @@ def setup(
             rich_help_panel="Configuration",
         ),
     ] = None,
+    site_url: Annotated[
+        str | None,
+        typer.Option(
+            "--site-url",
+            help="Pages URL for documentation site (e.g., https://user.github.io/repo or https://group.pages.gitlab.com/project)",
+            rich_help_panel="Configuration",
+        ),
+    ] = None,
     github_url_base: Annotated[
         str | None,
         typer.Option(
             "--github-url-base",
-            help="Base URL for GitHub Pages (auto-detected from git remote if not provided)",
+            help="[deprecated] Use --site-url instead",
             rich_help_panel="Configuration",
+            hidden=True,
         ),
     ] = None,
     c_source_dirs: Annotated[
@@ -210,7 +219,8 @@ def setup(
     Args:
         repo_path: Path to the repository
         provider: CI/CD provider ('github' or 'gitlab')
-        github_url_base: Base URL for GitHub Pages (deprecated, use --provider)
+        site_url: Explicit Pages URL (bypasses auto-detection)
+        github_url_base: Deprecated, use --site-url instead
         c_source_dirs: Explicit C/C++ source directories (overrides auto-detection)
         quiet: Suppress output (only show errors)
     """
@@ -237,6 +247,14 @@ def setup(
     # Parse provider argument
     ci_provider = _validate_provider(provider)
 
+    # Handle deprecated --github-url-base option
+    effective_site_url = site_url
+    if github_url_base and not site_url:
+        effective_site_url = github_url_base
+        display_message(
+            "--github-url-base is deprecated. Use --site-url instead.", MessageType.WARNING, title="Deprecated Option"
+        )
+
     try:
         display_message(
             f"Setting up documentation for [bold cyan]{repo_path}[/bold cyan]...",
@@ -244,11 +262,12 @@ def setup(
             title="Starting Setup",
         )
 
-        final_provider = setup_documentation(repo_path, ci_provider, github_url_base, c_source_dirs)
+        result = setup_documentation(repo_path, ci_provider, effective_site_url, c_source_dirs)
 
-        # Display completion message
-        msg = _generate_success_message(repo_path, final_provider)
-        display_message(msg, MessageType.SUCCESS, title="Setup Complete")
+        # Display completion message only on first run (when mkdocs.yml was created)
+        if result.is_first_run:
+            msg = _generate_success_message(repo_path, result.provider)
+            display_message(msg, MessageType.SUCCESS, title="Setup Complete")
 
     except typer.Exit:
         # Re-raise typer.Exit to allow proper exit handling

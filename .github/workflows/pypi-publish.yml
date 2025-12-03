@@ -29,7 +29,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Build package
-        run: uvx --from build pyproject-build --installer uv
+        run: uv build
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

@@ -14,11 +14,13 @@ from pathlib import Path
 
 import pytest
 from mkapidocs.generator import (
+    GitLabPagesResult,
     detect_c_code,
     detect_github_url_base,
     detect_private_registry,
     detect_typer_cli_module,
     detect_typer_dependency,
+    query_gitlab_pages_url,
 )
 from mkapidocs.models import ProjectConfig, PyprojectConfig
 from pytest_mock import MockerFixture
@@ -551,3 +553,174 @@ class TestPrivateRegistryDetection:
         # Assert
         assert is_private is False
         assert registry_url is None
+
+
+class TestGitLabPagesURLQuery:
+    """Test suite for GitLab API Pages URL query.
+
+    Tests the query_gitlab_pages_url function which fetches
+    the Pages URL from GitLab API using available tokens.
+    """
+
+    def test_query_returns_error_without_token(self, mocker: MockerFixture) -> None:
+        """Test that query returns error when no token is available.
+
+        Tests: query_gitlab_pages_url returns error without GITLAB_TOKEN or CI_JOB_TOKEN
+        How: Ensure environment variables are not set
+        """
+        # Arrange
+        mocker.patch.dict("os.environ", {}, clear=True)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "group/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url is None
+        assert result.error == "no_token"
+
+    def test_query_returns_url_on_success(self, mocker: MockerFixture) -> None:
+        """Test that query returns URL when GraphQL API call succeeds.
+
+        Tests: query_gitlab_pages_url returns URL from GraphQL response
+        How: Mock httpx.Client to return successful GraphQL response with URL
+        """
+        # Arrange
+        mocker.patch.dict("os.environ", {"GITLAB_TOKEN": "test-token"})
+        mock_response = mocker.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "project": {"pagesDeployments": {"nodes": [{"url": "https://group.pages.gitlab.example.com/project"}]}}
+            }
+        }
+
+        mock_client = mocker.MagicMock()
+        mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mocker.MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+
+        mocker.patch("httpx.Client", return_value=mock_client)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "group/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url == "https://group.pages.gitlab.example.com/project"
+        assert result.error is None
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert "gitlab.example.com/api/graphql" in call_args[0][0]
+
+    def test_query_returns_error_on_api_error(self, mocker: MockerFixture) -> None:
+        """Test that query returns error on API error.
+
+        Tests: query_gitlab_pages_url returns error on 403/404 status
+        How: Mock httpx.Client to return error status
+        """
+        # Arrange
+        mocker.patch.dict("os.environ", {"GITLAB_TOKEN": "test-token"})
+        mock_response = mocker.MagicMock()
+        mock_response.status_code = 403
+
+        mock_client = mocker.MagicMock()
+        mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mocker.MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+
+        mocker.patch("httpx.Client", return_value=mock_client)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "group/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url is None
+        assert result.error == "HTTP 403"
+
+    def test_query_returns_error_on_network_error(self, mocker: MockerFixture) -> None:
+        """Test that query returns error on network error.
+
+        Tests: query_gitlab_pages_url handles network errors gracefully
+        How: Mock httpx.Client.post to raise RequestError
+        """
+        import httpx
+
+        # Arrange
+        mocker.patch.dict("os.environ", {"GITLAB_TOKEN": "test-token"})
+
+        mock_client = mocker.MagicMock()
+        mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mocker.MagicMock(return_value=False)
+        mock_client.post.side_effect = httpx.RequestError("Connection failed")
+
+        mocker.patch("httpx.Client", return_value=mock_client)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "group/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url is None
+        assert result.error is not None
+        assert "Network error" in result.error
+
+    def test_query_uses_ci_job_token_as_fallback(self, mocker: MockerFixture) -> None:
+        """Test that query uses CI_JOB_TOKEN when GITLAB_TOKEN is not set.
+
+        Tests: query_gitlab_pages_url falls back to CI_JOB_TOKEN
+        How: Set only CI_JOB_TOKEN and verify API call is made
+        """
+        # Arrange
+        mocker.patch.dict("os.environ", {"CI_JOB_TOKEN": "job-token"}, clear=True)
+        mock_response = mocker.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"project": {"pagesDeployments": {"nodes": [{"url": "https://pages.example.com/project"}]}}}
+        }
+
+        mock_client = mocker.MagicMock()
+        mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mocker.MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+
+        mocker.patch("httpx.Client", return_value=mock_client)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "namespace/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url == "https://pages.example.com/project"
+        # Verify the token was used in the Authorization header
+        call_kwargs = mock_client.post.call_args
+        assert call_kwargs[1]["headers"]["Authorization"] == "Bearer job-token"
+
+    def test_query_returns_no_deployments_when_empty(self, mocker: MockerFixture) -> None:
+        """Test that query returns no_deployments flag when project has no Pages deployments.
+
+        Tests: query_gitlab_pages_url returns no_deployments=True for empty deployments
+        How: Mock GraphQL response with empty nodes array
+        """
+        # Arrange
+        mocker.patch.dict("os.environ", {"GITLAB_TOKEN": "test-token"})
+        mock_response = mocker.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {"project": {"pagesDeployments": {"nodes": []}}}}
+
+        mock_client = mocker.MagicMock()
+        mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mocker.MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+
+        mocker.patch("httpx.Client", return_value=mock_client)
+
+        # Act
+        result = query_gitlab_pages_url("gitlab.example.com", "group/project")
+
+        # Assert
+        assert isinstance(result, GitLabPagesResult)
+        assert result.url is None
+        assert result.no_deployments is True
+        assert result.error is None

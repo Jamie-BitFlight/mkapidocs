@@ -8,6 +8,7 @@ import re
 import subprocess
 from collections.abc import Sequence
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import cast
@@ -55,13 +56,84 @@ def display_message(message: str, message_type: MessageType = MessageType.INFO, 
     color, default_title = message_type.value
     panel_title = title or default_title
 
-    console.print(
-        Panel(message, title=f"[bold {color}]{panel_title}[/bold {color}]", border_style=color, padding=(1, 2))
-    )
+    panel = Panel.fit(message, title=f"[bold {color}]{panel_title}[/bold {color}]", border_style=color, padding=(1, 2))
+    console.print(panel)
+
+
+def _resolve_worktree_gitdir(repo_path: Path, gitdir_path: str) -> Path | None:
+    """Resolve gitdir path from a worktree .git file.
+
+    Args:
+        repo_path: Path to repository root.
+        gitdir_path: The gitdir path from the .git file.
+
+    Returns:
+        Path to the main .git directory containing config, or None.
+    """
+    # Handle relative paths
+    if not Path(gitdir_path).is_absolute():
+        gitdir_path = str((repo_path / gitdir_path).resolve())
+
+    gitdir = Path(gitdir_path)
+    if not gitdir.exists():
+        return None
+
+    # Check if this is a worktree path (contains /worktrees/)
+    # e.g., /repo/.git/worktrees/branch -> /repo/.git
+    if "worktrees" in gitdir.parts:
+        worktree_idx = gitdir.parts.index("worktrees")
+        main_git_dir = Path(*gitdir.parts[: worktree_idx + 1]).parent
+        if (main_git_dir / "config").exists():
+            return main_git_dir
+
+    # Direct gitdir reference
+    if (gitdir / "config").exists():
+        return gitdir
+
+    return None
+
+
+def _resolve_git_dir(repo_path: Path) -> Path | None:
+    """Resolve the actual .git directory, handling worktrees.
+
+    For regular repos, .git is a directory containing config.
+    For worktrees, .git is a file containing 'gitdir: /path/to/actual/git/dir'.
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        Path to the git directory containing config, or None if not found.
+    """
+    git_path = repo_path / ".git"
+
+    if not git_path.exists():
+        return None
+
+    # Regular repository - .git is a directory
+    if git_path.is_dir():
+        return git_path
+
+    # Worktree - .git is a file with gitdir pointer
+    if not git_path.is_file():
+        return None
+
+    try:
+        content = git_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    if not content.startswith("gitdir:"):
+        return None
+
+    gitdir_path = content[7:].strip()
+    return _resolve_worktree_gitdir(repo_path, gitdir_path)
 
 
 def get_git_remote_url(repo_path: Path) -> str | None:
     """Get git remote URL from repository.
+
+    Handles both regular repositories and git worktrees.
 
     Args:
         repo_path: Path to repository.
@@ -69,8 +141,11 @@ def get_git_remote_url(repo_path: Path) -> str | None:
     Returns:
         Git remote URL or None if not available.
     """
-    git_config_path = repo_path / ".git" / "config"
+    git_dir = _resolve_git_dir(repo_path)
+    if git_dir is None:
+        return None
 
+    git_config_path = git_dir / "config"
     if not git_config_path.exists():
         return None
 
@@ -103,6 +178,44 @@ def convert_ssh_to_https(git_url: str) -> str:
     return git_url
 
 
+def _parse_git_remote(remote_url: str) -> tuple[str, str, str] | None:
+    """Parse git remote URL into host, namespace, and project.
+
+    Handles both SSH and HTTPS formats, including nested groups.
+
+    Args:
+        remote_url: Git remote URL.
+
+    Returns:
+        Tuple of (host, namespace, project) or None if parsing fails.
+        Namespace may contain slashes for nested groups (e.g., "group/subgroup").
+    """
+    # SSH format: git@host:namespace/project.git or git@host:group/subgroup/project.git
+    ssh_match = re.match(r"^(?:ssh://)?git@([^:]+)[:/](.+?)(?:\.git)?$", remote_url)
+    if ssh_match:
+        host = ssh_match.group(1)
+        path = ssh_match.group(2)
+        # Split path into namespace (everything before last /) and project (last segment)
+        if "/" in path:
+            last_slash = path.rfind("/")
+            namespace = path[:last_slash]
+            project = path[last_slash + 1 :]
+            return host, namespace, project
+
+    # HTTPS format: https://host/namespace/project.git
+    https_match = re.match(r"^https://(?:[^@]+@)?([^/]+)/(.+?)(?:\.git)?$", remote_url)
+    if https_match:
+        host = https_match.group(1)
+        path = https_match.group(2)
+        if "/" in path:
+            last_slash = path.rfind("/")
+            namespace = path[:last_slash]
+            project = path[last_slash + 1 :]
+            return host, namespace, project
+
+    return None
+
+
 def _detect_url_base(repo_path: Path, domain: str, io_domain: str) -> str | None:
     """Detect Pages URL base from git remote for a specific domain.
 
@@ -118,24 +231,20 @@ def _detect_url_base(repo_path: Path, domain: str, io_domain: str) -> str | None
     if remote_url is None:
         return None
 
-    # Escape dots in domain for regex
-    escaped_domain = re.escape(domain)
+    parsed = _parse_git_remote(remote_url)
+    if parsed is None:
+        return None
 
-    # Parse SSH format: git@domain:owner/repo.git
-    ssh_pattern = rf"^(?:ssh://)?git@{escaped_domain}[:/]([^/]+)/([^/]+?)(?:\.git)?$"
-    if match := re.match(ssh_pattern, remote_url):
-        owner = match.group(1)
-        repo = match.group(2)
-        return f"https://{owner}.{io_domain}/{repo}/"
+    host, namespace, project = parsed
 
-    # Parse HTTPS format: https://domain/owner/repo.git
-    https_pattern = rf"^https://(?:[^@]+@)?{escaped_domain}/([^/]+)/([^/]+?)(?:\.git)?$"
-    if match := re.match(https_pattern, remote_url):
-        owner = match.group(1)
-        repo = match.group(2)
-        return f"https://{owner}.{io_domain}/{repo}/"
+    # Only match exact domain for GitHub/GitLab.com
+    if host != domain:
+        return None
 
-    return None
+    # For github.com/gitlab.com, use the standard io domain pattern
+    # Get the top-level namespace (first segment before any /)
+    top_namespace = namespace.split("/")[0]
+    return f"https://{top_namespace}.{io_domain}/{project}/"
 
 
 def detect_github_url_base(repo_path: Path) -> str | None:
@@ -153,6 +262,9 @@ def detect_github_url_base(repo_path: Path) -> str | None:
 def detect_gitlab_url_base(repo_path: Path) -> str | None:
     """Detect GitLab Pages URL base from git remote.
 
+    For gitlab.com, returns standard gitlab.io URL.
+    For enterprise GitLab instances, returns None (requires manual configuration).
+
     Args:
         repo_path: Path to repository.
 
@@ -160,6 +272,136 @@ def detect_gitlab_url_base(repo_path: Path) -> str | None:
         GitLab Pages URL base or None if not detected.
     """
     return _detect_url_base(repo_path, "gitlab.com", "gitlab.io")
+
+
+def detect_gitlab_enterprise_info(repo_path: Path) -> tuple[str, str, str] | None:
+    """Detect enterprise GitLab instance information from git remote.
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        Tuple of (host, namespace, project) for enterprise GitLab, or None.
+    """
+    remote_url = get_git_remote_url(repo_path)
+    if remote_url is None:
+        return None
+
+    parsed = _parse_git_remote(remote_url)
+    if parsed is None:
+        return None
+
+    host, namespace, project = parsed
+
+    # Skip known public hosts
+    if host in ("github.com", "gitlab.com", "bitbucket.org"):
+        return None
+
+    return host, namespace, project
+
+
+def _get_gitlab_info(repo_path: Path) -> tuple[str, str, str] | None:
+    """Get GitLab host, namespace, and project from git remote.
+
+    Works for both gitlab.com and enterprise GitLab instances.
+    This function only parses the git remote - the caller is responsible for
+    ensuring this is actually a GitLab repository (via detect_ci_provider).
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        Tuple of (host, namespace, project), or None if no git remote.
+    """
+    remote_url = get_git_remote_url(repo_path)
+    if remote_url is None:
+        return None
+
+    return _parse_git_remote(remote_url)
+
+
+@dataclass
+class GitLabPagesResult:
+    """Result of querying GitLab Pages URL."""
+
+    url: str | None = None
+    no_deployments: bool = False  # API succeeded but no Pages deployed yet
+    error: str | None = None  # API call failed
+
+
+def query_gitlab_pages_url(gitlab_host: str, project_path: str) -> GitLabPagesResult:
+    """Query GitLab GraphQL API for the project's Pages URL.
+
+    Uses the GraphQL API to fetch Pages deployment URL, which only requires
+    read_api scope (Guest role) - more permissive than the REST API.
+    Checks GITLAB_TOKEN first, then falls back to CI_JOB_TOKEN.
+
+    Args:
+        gitlab_host: The GitLab instance hostname (e.g., 'gitlab.com' or 'gitlab.example.com').
+        project_path: Project path (e.g., 'namespace/project' or 'group/subgroup/project').
+
+    Returns:
+        GitLabPagesResult with url, no_deployments flag, or error message.
+    """
+    import httpx
+
+    # Check for available tokens
+    token = os.environ.get("GITLAB_TOKEN") or os.environ.get("CI_JOB_TOKEN")
+    if not token:
+        return GitLabPagesResult(error="no_token")
+
+    # GraphQL query to get Pages deployment URL
+    query = """
+    query($projectPath: ID!) {
+      project(fullPath: $projectPath) {
+        pagesDeployments(first: 1) {
+          nodes {
+            url
+          }
+        }
+      }
+    }
+    """
+
+    graphql_url = f"https://{gitlab_host}/api/graphql"
+    payload = {"query": query, "variables": {"projectPath": project_path}}
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                graphql_url,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+
+                # Check for GraphQL errors
+                if "errors" in data:
+                    error_msg = data["errors"][0].get("message", "Unknown GraphQL error")
+                    return GitLabPagesResult(error=error_msg)
+
+                # Navigate: data -> project -> pagesDeployments -> nodes[0] -> url
+                project = data.get("data", {}).get("project")
+                if project:
+                    nodes = project.get("pagesDeployments", {}).get("nodes", [])
+                    if nodes:
+                        url = nodes[0].get("url")
+                        if isinstance(url, str):
+                            return GitLabPagesResult(url=url)
+                    # API succeeded but no Pages deployments exist yet
+                    return GitLabPagesResult(no_deployments=True)
+                else:
+                    return GitLabPagesResult(error="Project not found (may lack permissions)")
+            else:
+                return GitLabPagesResult(error=f"HTTP {response.status_code}")
+    except httpx.RequestError as e:
+        return GitLabPagesResult(error=f"Network error: {e}")
+    except (ValueError, KeyError, IndexError) as e:
+        return GitLabPagesResult(error=f"Parse error: {e}")
+
+    return GitLabPagesResult(error="Unknown error")
 
 
 def detect_ci_provider(repo_path: Path) -> CIProvider | None:
@@ -234,21 +476,30 @@ def _run_subprocess(cmd: Sequence[str | Path], cwd: Path, env: dict[str, str]) -
     return result.returncode
 
 
-def ensure_mkapidocs_installed(repo_path: Path) -> None:
+def ensure_mkapidocs_installed(repo_path: Path) -> bool:
     """Ensure mkapidocs is installed in the target project's environment.
 
-    If not installed, it injects it:
-    - As editable install if running from mkapidocs source
+    Checks if already installed first. If not installed, injects it:
+    - As editable install with symlink mode if running from mkapidocs source
     - As dev dependency otherwise
 
     Args:
         repo_path: Path to target project.
+
+    Returns:
+        True if mkapidocs was installed (first run), False if already present.
     """
-    console.print("[blue]:syringe: Injecting mkapidocs into target environment...[/blue]")
+    from mkapidocs.builder import is_mkapidocs_in_target_env
 
     if not (uv_cmd := which("uv")):
         console.print("[yellow]uv not found. Skipping mkapidocs installation check.[/yellow]")
-        return
+        return False
+
+    # Check if already installed - skip if so
+    if is_mkapidocs_in_target_env(repo_path):
+        return False
+
+    console.print("[blue]:syringe: Injecting mkapidocs into target environment...[/blue]")
 
     # Unset VIRTUAL_ENV to ensure uv uses the target environment
     env = os.environ.copy()
@@ -259,25 +510,27 @@ def ensure_mkapidocs_installed(repo_path: Path) -> None:
 
     if repo_root:
         console.print(f"[blue]Detected mkapidocs source at {repo_root}. Installing in editable mode.[/blue]")
-        # Sync first to ensure environment exists and dependencies are installed
-        console.print("[blue]Syncing target environment...[/blue]")
+        # Sync to ensure environment exists (only needed for editable dev installs)
         sync_cmd = [uv_cmd, "--directory", str(repo_path), "sync"]
         try:
             _run_subprocess(sync_cmd, repo_path, env)
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to sync target environment: {e}[/yellow]")
 
-        # Use pip install -e for editable install to avoid modifying pyproject.toml with local path
-        cmd = [uv_cmd, "--directory", str(repo_path), "pip", "install", "-e", str(repo_root)]
+        # Use pip install -e with symlink mode to avoid copy churn
+        cmd = [uv_cmd, "--directory", str(repo_path), "pip", "install", "-e", str(repo_root), "--link-mode=symlink"]
     else:
         console.print("[blue]Installing mkapidocs from registry.[/blue]")
         cmd = [uv_cmd, "--directory", str(repo_path), "add", "--dev", "mkapidocs"]
 
     try:
         _run_subprocess(cmd, repo_path, env)
-        console.print("[green]Successfully installed mkapidocs.[/green]")
     except Exception as e:
         console.print(f"[yellow]Warning: Failed to inject mkapidocs: {e}[/yellow]")
+        return False
+    else:
+        console.print("[green]Successfully installed mkapidocs.[/green]")
+        return True
 
 
 def read_pyproject(repo_path: Path) -> PyprojectConfig:
@@ -662,7 +915,7 @@ def create_mkdocs_config(
     has_typer: bool,
     ci_provider: CIProvider,
     cli_modules: list[str] | None = None,
-) -> None:
+) -> bool:
     """Create or update mkdocs.yml configuration file.
 
     If the file exists, performs a smart merge that preserves user customizations
@@ -676,6 +929,9 @@ def create_mkdocs_config(
         has_typer: Whether repository uses Typer.
         ci_provider: CI/CD provider type (GITHUB or GITLAB).
         cli_modules: List of detected CLI module paths (empty/None if none).
+
+    Returns:
+        True if mkdocs.yml was created fresh (first run), False if updated existing.
 
     Raises:
         CLIError: If existing YAML cannot be parsed or merge fails
@@ -708,6 +964,8 @@ def create_mkdocs_config(
 
     mkdocs_path = repo_path / "mkdocs.yml"
 
+    is_first_run = not mkdocs_path.exists()
+
     if mkdocs_path.exists():
         # File exists - perform smart merge
         merged_content, changes = merge_mkdocs_yaml(mkdocs_path, content)
@@ -717,6 +975,8 @@ def create_mkdocs_config(
         # New file - create fresh
         _ = mkdocs_path.write_text(content)
         console.print(f"[green]:white_check_mark:[/green] Created {mkdocs_path.name}")
+
+    return is_first_run
 
 
 def _is_pages_job(job: dict[str, object]) -> bool:
@@ -918,12 +1178,10 @@ def create_gitlab_ci(repo_path: Path) -> None:
     # Create workflows directory
     workflows_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write pages workflow file
+    # Write pages workflow file (only if doesn't exist)
     if not pages_workflow_path.exists():
         _ = pages_workflow_path.write_text(GITLAB_CI_PAGES_TEMPLATE, encoding="utf-8")
         console.print(f"[green]:white_check_mark: Created {pages_workflow_path.relative_to(repo_path)}[/green]")
-    else:
-        console.print(f"[yellow]Skipping {pages_workflow_path.relative_to(repo_path)} (already exists)[/yellow]")
 
     # Check for existing include
     if _check_existing_gitlab_ci(gitlab_ci_path):
@@ -985,7 +1243,6 @@ def create_index_page(
 
     # Only create if doesn't exist - preserve user customizations
     if index_path.exists():
-        console.print(f"[yellow]  Preserving existing {index_path.name}[/yellow]")
         return
 
     env = Environment(keep_trailing_newline=True, autoescape=True)
@@ -1229,8 +1486,6 @@ def create_supporting_docs(
         install_template = env.from_string(INSTALL_MD_TEMPLATE)
         install_content = install_template.render(**template_context)
         _ = install_path.write_text(install_content)
-    else:
-        console.print(f"[yellow]  Preserving existing {install_path.name}[/yellow]")
 
 
 def _get_project_info(pyproject: PyprojectConfig) -> tuple[str, str, str]:
@@ -1255,15 +1510,79 @@ def _get_project_info(pyproject: PyprojectConfig) -> tuple[str, str, str]:
     return project_name, description, license_name
 
 
+def _detect_gitlab_site_url(repo_path: Path) -> str:
+    """Detect GitLab Pages site URL from git remote and API.
+
+    Args:
+        repo_path: Path to repository.
+
+    Returns:
+        Detected or heuristic site URL.
+    """
+    gitlab_info = _get_gitlab_info(repo_path)
+
+    if not gitlab_info:
+        # No git remote at all - use generic placeholder
+        detected_url = f"https://example.gitlab.io/{repo_path.name}"
+        warning_message = (
+            "Could not auto-detect GitLab Pages URL.\n\n"
+            f"Using placeholder: [cyan]{detected_url}[/cyan]\n\n"
+            "[bold]After setup:[/bold]\n"
+            "Edit [cyan]mkdocs.yml[/cyan] and update [cyan]site_url[/cyan] to the correct value."
+        )
+        display_message(warning_message, MessageType.WARNING, title="GitLab URL - Manual Configuration Required")
+        return detected_url
+
+    host, namespace, project = gitlab_info
+    project_path = f"{namespace}/{project}"
+    is_enterprise = host != "gitlab.com"
+    title_prefix = "Enterprise GitLab" if is_enterprise else "GitLab Pages"
+
+    # Try to query GitLab API for Pages URL if token is available
+    api_result = query_gitlab_pages_url(host, project_path)
+
+    if api_result.url:
+        detected_url = api_result.url.rstrip("/")
+        display_message(
+            f"GitLab Pages URL retrieved from API: [cyan]{detected_url}[/cyan]", MessageType.SUCCESS, title=title_prefix
+        )
+        return detected_url
+
+    # Use heuristic-based URL
+    if is_enterprise:
+        detected_url = f"https://{namespace.split('/')[0]}.pages.{host}/{project}"
+    else:
+        detected_url = f"https://{namespace}.gitlab.io/{project}"
+
+    # Provide appropriate hint based on what happened
+    if api_result.no_deployments:
+        hint = "Pages not deployed yet. URL will be confirmed after first deployment."
+    elif api_result.error == "no_token":
+        hint = "Set [cyan]GITLAB_TOKEN[/cyan] environment variable to query Pages URL from API."
+    else:
+        hint = f"API error: {api_result.error}"
+
+    warning_message = (
+        f"GitLab instance: [bold cyan]{host}[/bold cyan]\n\n"
+        f"[bold]Repository:[/bold] {project_path}\n\n"
+        f"[bold]Hint:[/bold] {hint}\n\n"
+        f"Using heuristic URL: [cyan]{detected_url}[/cyan]\n\n"
+        "[bold]After setup:[/bold]\n"
+        "Edit [cyan]mkdocs.yml[/cyan] and update [cyan]site_url[/cyan] if the URL is incorrect."
+    )
+    display_message(warning_message, MessageType.WARNING, title=f"{title_prefix} - URL May Need Adjustment")
+    return detected_url
+
+
 def _detect_provider_and_url(
-    repo_path: Path, provider: CIProvider | None, github_url_base: str | None
+    repo_path: Path, provider: CIProvider | None, site_url: str | None
 ) -> tuple[CIProvider, str]:
     """Detect CI provider and site URL.
 
     Args:
         repo_path: Path to repository.
         provider: Explicitly provided CI provider (or None).
-        github_url_base: Explicitly provided GitHub URL base (or None).
+        site_url: Explicitly provided site URL (or None for auto-detection).
 
     Returns:
         Tuple containing (detected_provider, site_url).
@@ -1285,28 +1604,19 @@ def _detect_provider_and_url(
             display_message(error_message, MessageType.ERROR, title="Provider Detection Failed")
             raise typer.Exit(1)
 
+    # If site_url is explicitly provided, use it directly
+    if site_url:
+        return provider, site_url.rstrip("/")
+
     # Detect site URL based on provider
     if provider == CIProvider.GITHUB:
+        github_url_base = detect_github_url_base(repo_path)
         if github_url_base is None:
-            github_url_base = detect_github_url_base(repo_path)
-            if github_url_base is None:
-                raise ValueError(
-                    "Could not auto-detect GitHub URL from git remote. Please provide --github-url-base option."
-                )
-        site_url = github_url_base.rstrip("/")
-    else:  # provider == CIProvider.GITLAB
-        gitlab_url_base = detect_gitlab_url_base(repo_path)
-        if gitlab_url_base is None:
-            # Try to construct from repo name if auto-detection fails
-            # This is a fallback - users can manually edit mkdocs.yml later
-            site_url = f"https://example.gitlab.io/{repo_path.name}"
-            console.print(
-                f"[yellow]:warning: Could not auto-detect GitLab Pages URL. Using placeholder: {site_url}[/yellow]"
-            )
-        else:
-            site_url = gitlab_url_base.rstrip("/")
+            raise ValueError("Could not auto-detect GitHub URL from git remote. Please provide --site-url option.")
+        return provider, github_url_base.rstrip("/")
 
-    return provider, site_url
+    # GitLab provider
+    return provider, _detect_gitlab_site_url(repo_path)
 
 
 def _detect_features(
@@ -1352,22 +1662,31 @@ def _detect_features(
     return c_source_dirs_list, cli_modules, has_typer, has_private_registry, private_registry_url
 
 
+@dataclass
+class SetupResult:
+    """Result of setup_documentation() with context for messaging."""
+
+    provider: CIProvider
+    is_first_run: bool  # True if mkdocs.yml was created fresh
+    mkapidocs_installed: bool  # True if mkapidocs was installed (not already present)
+
+
 def setup_documentation(
     repo_path: Path,
     provider: CIProvider | None = None,
-    github_url_base: str | None = None,
+    site_url: str | None = None,
     c_source_dirs: list[str] | None = None,
-) -> CIProvider:
+) -> SetupResult:
     """Set up MkDocs documentation for a Python repository.
 
     Args:
         repo_path: Path to repository.
         provider: CI/CD provider (auto-detected if None).
-        github_url_base: Base URL for GitHub Pages (deprecated, for backward compatibility).
+        site_url: Explicit Pages URL (auto-detected if None).
         c_source_dirs: Optional list of C/C++ source directories from CLI.
 
     Returns:
-        The CI provider that was used for setup.
+        SetupResult with provider, first_run flag, and installation status.
 
     Raises:
         ValueError: If provider cannot be auto-detected.
@@ -1376,7 +1695,7 @@ def setup_documentation(
     pyproject = read_pyproject(repo_path)
 
     project_name, description, license_name = _get_project_info(pyproject)
-    provider, site_url = _detect_provider_and_url(repo_path, provider, github_url_base)
+    provider, final_site_url = _detect_provider_and_url(repo_path, provider, site_url)
     c_source_dirs_list, cli_modules, _, has_private_registry, private_registry_url = _detect_features(
         repo_path, pyproject, c_source_dirs
     )
@@ -1384,7 +1703,9 @@ def setup_documentation(
     # has_typer_cli flag is True if CLI modules were actually detected
     has_typer_cli = len(cli_modules) > 0
 
-    create_mkdocs_config(repo_path, project_name, site_url, c_source_dirs_list, has_typer_cli, provider, cli_modules)
+    is_first_run = create_mkdocs_config(
+        repo_path, project_name, final_site_url, c_source_dirs_list, has_typer_cli, provider, cli_modules
+    )
 
     # Create CI/CD configuration based on provider
     if provider == CIProvider.GITHUB:
@@ -1407,15 +1728,12 @@ def setup_documentation(
         repo_path, project_name, c_source_dirs_list, cli_modules, has_private_registry, private_registry_url
     )
     create_supporting_docs(
-        repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, site_url, git_url=None
+        repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, final_site_url, git_url=None
     )
 
     update_gitignore(repo_path, provider)
 
-    # Add mkapidocs to target project's dev dependencies (now called at start, but ensuring here too is fine)
-    # Actually, we should call it at the start to ensure environment is ready for other steps if needed,
-    # but strictly speaking it's only needed for build.
-    # However, the user wants setup to handle it.
-    ensure_mkapidocs_installed(repo_path)
+    # Add mkapidocs to target project's dev dependencies
+    mkapidocs_installed = ensure_mkapidocs_installed(repo_path)
 
-    return provider
+    return SetupResult(provider=provider, is_first_run=is_first_run, mkapidocs_installed=mkapidocs_installed)

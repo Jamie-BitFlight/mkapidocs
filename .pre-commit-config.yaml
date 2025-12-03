@@ -87,7 +87,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: uv run --no-sync pep723-loader mypy
+        entry: uv run -q --no-sync pep723-loader mypy
         language: system
         types: [python]
         pass_filenames: true
@@ -95,7 +95,7 @@ repos:
 
       - id: pyright
         name: basedpyright
-        entry: uv run --no-sync pep723-loader basedpyright
+        entry: uv run -q --no-sync pep723-loader basedpyright
         language: system
         types: [python]
         pass_filenames: true
