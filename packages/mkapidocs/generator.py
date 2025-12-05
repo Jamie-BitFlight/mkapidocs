@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import ast
+import http
 import os
 import re
 import subprocess
-from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
+import httpx
 import tomlkit
+import typer
 from jinja2 import Environment
 from rich.console import Console
+from rich.panel import Panel
 from tomlkit.exceptions import TOMLKitError
 
+from mkapidocs.builder import is_mkapidocs_in_target_env
 from mkapidocs.models import (
     CIProvider,
     GitLabCIConfig,
@@ -37,13 +41,23 @@ from mkapidocs.templates import (
     MKDOCS_YML_TEMPLATE,
     PYTHON_API_MD_TEMPLATE,
 )
-from mkapidocs.yaml_utils import YAMLError, display_file_changes, merge_mkdocs_yaml
+from mkapidocs.yaml_utils import (
+    YAMLError,
+    display_file_changes,
+    load_yaml_from_path,
+    merge_mkdocs_yaml,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Initialize Rich console
 console = Console()
 
 
-def display_message(message: str, message_type: MessageType = MessageType.INFO, title: str | None = None) -> None:
+def display_message(
+    message: str, message_type: MessageType = MessageType.INFO, title: str | None = None
+) -> None:
     """Display a formatted message panel.
 
     Args:
@@ -51,12 +65,15 @@ def display_message(message: str, message_type: MessageType = MessageType.INFO, 
         message_type: Type of message (affects styling)
         title: Optional panel title (defaults to message type)
     """
-    from rich.panel import Panel
-
     color, default_title = message_type.value
     panel_title = title or default_title
 
-    panel = Panel.fit(message, title=f"[bold {color}]{panel_title}[/bold {color}]", border_style=color, padding=(1, 2))
+    panel = Panel.fit(
+        message,
+        title=f"[bold {color}]{panel_title}[/bold {color}]",
+        border_style=color,
+        padding=(1, 2),
+    )
     console.print(panel)
 
 
@@ -171,7 +188,9 @@ def convert_ssh_to_https(git_url: str) -> str:
     Returns:
         HTTPS URL format.
     """
-    if ssh_protocol_match := re.match(r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)(?:\.git)?$", git_url):
+    if ssh_protocol_match := re.match(
+        r"^(?:ssh://)?git@([^:]+)(?::[0-9]+)?[:/](.+?)(?:\.git)?$", git_url
+    ):
         host = ssh_protocol_match.group(1)
         path = ssh_protocol_match.group(2)
         return f"https://{host}/{path}"
@@ -294,7 +313,7 @@ def detect_gitlab_enterprise_info(repo_path: Path) -> tuple[str, str, str] | Non
     host, namespace, project = parsed
 
     # Skip known public hosts
-    if host in ("github.com", "gitlab.com", "bitbucket.org"):
+    if host in {"github.com", "gitlab.com"}:
         return None
 
     return host, namespace, project
@@ -329,6 +348,93 @@ class GitLabPagesResult:
     error: str | None = None  # API call failed
 
 
+# GraphQL query constant for GitLab Pages URL
+_GITLAB_PAGES_QUERY = """
+query($projectPath: ID!) {
+  project(fullPath: $projectPath) {
+    pagesDeployments(first: 1) {
+      nodes {
+        url
+      }
+    }
+  }
+}
+"""
+
+
+def _extract_graphql_error(data: dict[str, object]) -> str | None:
+    """Extract error message from GraphQL response if present.
+
+    Args:
+        data: JSON response from GitLab GraphQL API.
+
+    Returns:
+        Error message string if errors present, None otherwise.
+    """
+    if "errors" not in data:
+        return None
+
+    errors = data["errors"]
+    if not isinstance(errors, list) or not errors:
+        return "Unknown GraphQL error"
+
+    first_error = errors[0]
+    if isinstance(first_error, dict):
+        return str(first_error.get("message", "Unknown GraphQL error"))
+    return "Unknown GraphQL error"
+
+
+def _extract_pages_url(data: dict[str, object]) -> GitLabPagesResult:
+    """Extract Pages URL from successful GraphQL response.
+
+    Args:
+        data: JSON response data (after error checking).
+
+    Returns:
+        GitLabPagesResult with URL, no_deployments flag, or error.
+    """
+    response_data = data.get("data")
+    if not isinstance(response_data, dict):
+        return GitLabPagesResult(error="Invalid response format")
+
+    project = response_data.get("project")
+    if not isinstance(project, dict):
+        return GitLabPagesResult(error="Project not found (may lack permissions)")
+
+    pages_deployments = project.get("pagesDeployments")
+    nodes = (
+        pages_deployments.get("nodes") if isinstance(pages_deployments, dict) else None
+    )
+
+    if not isinstance(nodes, list) or not nodes:
+        return GitLabPagesResult(no_deployments=True)
+
+    first_node = nodes[0]
+    if isinstance(first_node, dict):
+        url = first_node.get("url")
+        if isinstance(url, str):
+            return GitLabPagesResult(url=url)
+
+    return GitLabPagesResult(no_deployments=True)
+
+
+def _parse_gitlab_graphql_response(data: dict[str, object]) -> GitLabPagesResult:
+    """Parse GitLab GraphQL response for Pages URL.
+
+    Args:
+        data: JSON response from GitLab GraphQL API.
+
+    Returns:
+        GitLabPagesResult with parsed data.
+    """
+    # Check for GraphQL errors first
+    if error_msg := _extract_graphql_error(data):
+        return GitLabPagesResult(error=error_msg)
+
+    # Extract URL from successful response
+    return _extract_pages_url(data)
+
+
 def query_gitlab_pages_url(gitlab_host: str, project_path: str) -> GitLabPagesResult:
     """Query GitLab GraphQL API for the project's Pages URL.
 
@@ -343,65 +449,34 @@ def query_gitlab_pages_url(gitlab_host: str, project_path: str) -> GitLabPagesRe
     Returns:
         GitLabPagesResult with url, no_deployments flag, or error message.
     """
-    import httpx
-
     # Check for available tokens
     token = os.environ.get("GITLAB_TOKEN") or os.environ.get("CI_JOB_TOKEN")
     if not token:
         return GitLabPagesResult(error="no_token")
 
-    # GraphQL query to get Pages deployment URL
-    query = """
-    query($projectPath: ID!) {
-      project(fullPath: $projectPath) {
-        pagesDeployments(first: 1) {
-          nodes {
-            url
-          }
-        }
-      }
-    }
-    """
-
     graphql_url = f"https://{gitlab_host}/api/graphql"
-    payload = {"query": query, "variables": {"projectPath": project_path}}
+    payload = {"query": _GITLAB_PAGES_QUERY, "variables": {"projectPath": project_path}}
 
     try:
         with httpx.Client(timeout=10.0) as client:
             response = client.post(
                 graphql_url,
                 json=payload,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
             )
 
-            if response.status_code == 200:
-                data = response.json()
-
-                # Check for GraphQL errors
-                if "errors" in data:
-                    error_msg = data["errors"][0].get("message", "Unknown GraphQL error")
-                    return GitLabPagesResult(error=error_msg)
-
-                # Navigate: data -> project -> pagesDeployments -> nodes[0] -> url
-                project = data.get("data", {}).get("project")
-                if project:
-                    nodes = project.get("pagesDeployments", {}).get("nodes", [])
-                    if nodes:
-                        url = nodes[0].get("url")
-                        if isinstance(url, str):
-                            return GitLabPagesResult(url=url)
-                    # API succeeded but no Pages deployments exist yet
-                    return GitLabPagesResult(no_deployments=True)
-                else:
-                    return GitLabPagesResult(error="Project not found (may lack permissions)")
-            else:
+            if response.status_code != http.HTTPStatus.OK:
                 return GitLabPagesResult(error=f"HTTP {response.status_code}")
+
+            data = response.json()
+            return _parse_gitlab_graphql_response(data)
     except httpx.RequestError as e:
         return GitLabPagesResult(error=f"Network error: {e}")
     except (ValueError, KeyError, IndexError) as e:
         return GitLabPagesResult(error=f"Parse error: {e}")
-
-    return GitLabPagesResult(error="Unknown error")
 
 
 def detect_ci_provider(repo_path: Path) -> CIProvider | None:
@@ -450,13 +525,15 @@ def _get_mkapidocs_repo_root() -> Path | None:
 
     if (potential_root / "pyproject.toml").exists():
         try:
-            with open(potential_root / "pyproject.toml", encoding="utf-8") as f:
+            with Path(potential_root / "pyproject.toml").open(encoding="utf-8") as f:
                 config = tomlkit.load(f)
             project = config.get("project")
             if isinstance(project, dict) and project.get("name") == "mkapidocs":
                 return potential_root
         except (OSError, TOMLKitError) as e:
-            console.print(f"[yellow]Debug: Failed to read pyproject.toml at {potential_root}: {e}[/yellow]")
+            console.print(
+                f"[yellow]Debug: Failed to read pyproject.toml at {potential_root}: {e}[/yellow]"
+            )
 
     return None
 
@@ -472,7 +549,9 @@ def _run_subprocess(cmd: Sequence[str | Path], cwd: Path, env: dict[str, str]) -
     Returns:
         Exit code from the subprocess.
     """
-    result = subprocess.run(list(cmd), cwd=cwd, env=env, capture_output=False, check=False)
+    result = subprocess.run(
+        list(cmd), cwd=cwd, env=env, capture_output=False, check=False
+    )
     return result.returncode
 
 
@@ -489,17 +568,19 @@ def ensure_mkapidocs_installed(repo_path: Path) -> bool:
     Returns:
         True if mkapidocs was installed (first run), False if already present.
     """
-    from mkapidocs.builder import is_mkapidocs_in_target_env
-
     if not (uv_cmd := which("uv")):
-        console.print("[yellow]uv not found. Skipping mkapidocs installation check.[/yellow]")
+        console.print(
+            "[yellow]uv not found. Skipping mkapidocs installation check.[/yellow]"
+        )
         return False
 
     # Check if already installed - skip if so
     if is_mkapidocs_in_target_env(repo_path):
         return False
 
-    console.print("[blue]:syringe: Injecting mkapidocs into target environment...[/blue]")
+    console.print(
+        "[blue]:syringe: Injecting mkapidocs into target environment...[/blue]"
+    )
 
     # Unset VIRTUAL_ENV to ensure uv uses the target environment
     env = os.environ.copy()
@@ -509,23 +590,36 @@ def ensure_mkapidocs_installed(repo_path: Path) -> bool:
     repo_root = _get_mkapidocs_repo_root()
 
     if repo_root:
-        console.print(f"[blue]Detected mkapidocs source at {repo_root}. Installing in editable mode.[/blue]")
+        console.print(
+            f"[blue]Detected mkapidocs source at {repo_root}. Installing in editable mode.[/blue]"
+        )
         # Sync to ensure environment exists (only needed for editable dev installs)
         sync_cmd = [uv_cmd, "--directory", str(repo_path), "sync"]
         try:
             _run_subprocess(sync_cmd, repo_path, env)
-        except Exception as e:
-            console.print(f"[yellow]Warning: Failed to sync target environment: {e}[/yellow]")
+        except (OSError, subprocess.SubprocessError) as e:
+            console.print(
+                f"[yellow]Warning: Failed to sync target environment: {e}[/yellow]"
+            )
 
         # Use pip install -e with symlink mode to avoid copy churn
-        cmd = [uv_cmd, "--directory", str(repo_path), "pip", "install", "-e", str(repo_root), "--link-mode=symlink"]
+        cmd = [
+            uv_cmd,
+            "--directory",
+            str(repo_path),
+            "pip",
+            "install",
+            "-e",
+            str(repo_root),
+            "--link-mode=symlink",
+        ]
     else:
         console.print("[blue]Installing mkapidocs from registry.[/blue]")
         cmd = [uv_cmd, "--directory", str(repo_path), "add", "--dev", "mkapidocs"]
 
     try:
         _run_subprocess(cmd, repo_path, env)
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         console.print(f"[yellow]Warning: Failed to inject mkapidocs: {e}[/yellow]")
         return False
     else:
@@ -550,7 +644,7 @@ def read_pyproject(repo_path: Path) -> PyprojectConfig:
     if not pyproject_path.exists():
         raise FileNotFoundError(f"pyproject.toml not found in {repo_path}")
 
-    with open(pyproject_path, encoding="utf-8") as f:
+    with Path(pyproject_path).open(encoding="utf-8") as f:
         raw_data = tomlkit.load(f)
 
     return PyprojectConfig.from_dict(raw_data)
@@ -564,7 +658,7 @@ def write_pyproject(repo_path: Path, config: PyprojectConfig) -> None:
         config: Typed configuration to write.
     """
     pyproject_path = repo_path / "pyproject.toml"
-    with open(pyproject_path, "w", encoding="utf-8") as f:
+    with Path(pyproject_path).open("w", encoding="utf-8") as f:
         tomlkit.dump(config.to_dict(), f)
 
 
@@ -581,7 +675,9 @@ def _contains_c_files(dir_path: Path, c_extensions: set[str]) -> bool:
     return any(file_path.suffix in c_extensions for file_path in dir_path.rglob("*"))
 
 
-def _detect_c_code_from_explicit(repo_path: Path, explicit_dirs: list[str], c_extensions: set[str]) -> list[Path]:
+def _detect_c_code_from_explicit(
+    repo_path: Path, explicit_dirs: list[str], c_extensions: set[str]
+) -> list[Path]:
     """Detect C code from explicit CLI arguments.
 
     Args:
@@ -595,12 +691,18 @@ def _detect_c_code_from_explicit(repo_path: Path, explicit_dirs: list[str], c_ex
     found_dirs: list[Path] = []
     for dir_str in explicit_dirs:
         dir_path = (repo_path / dir_str).resolve()
-        if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
+        if (
+            dir_path.exists()
+            and dir_path.is_dir()
+            and _contains_c_files(dir_path, c_extensions)
+        ):
             found_dirs.append(dir_path)
     return found_dirs
 
 
-def _detect_c_code_from_env(repo_path: Path, env_dirs: str, c_extensions: set[str]) -> list[Path]:
+def _detect_c_code_from_env(
+    repo_path: Path, env_dirs: str, c_extensions: set[str]
+) -> list[Path]:
     """Detect C code from environment variable.
 
     Args:
@@ -614,12 +716,18 @@ def _detect_c_code_from_env(repo_path: Path, env_dirs: str, c_extensions: set[st
     found_dirs: list[Path] = []
     for dir_str in env_dirs.split(":"):
         dir_path = (repo_path / dir_str.strip()).resolve()
-        if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
+        if (
+            dir_path.exists()
+            and dir_path.is_dir()
+            and _contains_c_files(dir_path, c_extensions)
+        ):
             found_dirs.append(dir_path)
     return found_dirs
 
 
-def _detect_c_code_from_config(repo_path: Path, pyproject: PyprojectConfig, c_extensions: set[str]) -> list[Path]:
+def _detect_c_code_from_config(
+    repo_path: Path, pyproject: PyprojectConfig, c_extensions: set[str]
+) -> list[Path]:
     """Detect C code from pypis_delivery_service config.
 
     Args:
@@ -669,9 +777,16 @@ def _detect_c_code_from_git(repo_path: Path, c_extensions: set[str]) -> list[Pat
     if not (git_cmd := which("git")):
         return []
 
-    with suppress(subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+    with suppress(
+        subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError
+    ):
         result = subprocess.run(
-            [git_cmd, "ls-files"], cwd=repo_path, capture_output=True, text=True, check=True, timeout=10
+            [git_cmd, "ls-files"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
         )
         # Find unique directories containing C/C++ files
         c_dirs: set[Path] = set()
@@ -685,16 +800,21 @@ def _detect_c_code_from_git(repo_path: Path, c_extensions: set[str]) -> list[Pat
 
         if c_dirs:
             # Verify directories exist and contain C/C++ files
-            found_dirs: list[Path] = []
-            for dir_path in sorted(c_dirs):
-                if dir_path.exists() and dir_path.is_dir() and _contains_c_files(dir_path, c_extensions):
-                    found_dirs.append(dir_path)
+            found_dirs: list[Path] = [
+                dir_path
+                for dir_path in sorted(c_dirs)
+                if dir_path.exists()
+                and dir_path.is_dir()
+                and _contains_c_files(dir_path, c_extensions)
+            ]
             return found_dirs
     return []
 
 
 def detect_c_code(
-    repo_path: Path, explicit_dirs: list[str] | None = None, pyproject: PyprojectConfig | None = None
+    repo_path: Path,
+    explicit_dirs: list[str] | None = None,
+    pyproject: PyprojectConfig | None = None,
 ) -> list[Path]:
     """Detect directories containing C/C++ source code.
 
@@ -718,7 +838,9 @@ def detect_c_code(
 
     # Priority 1: Explicit CLI option
     if explicit_dirs:
-        found_dirs = _detect_c_code_from_explicit(repo_path, explicit_dirs, c_extensions)
+        found_dirs = _detect_c_code_from_explicit(
+            repo_path, explicit_dirs, c_extensions
+        )
         if found_dirs:
             return found_dirs
 
@@ -740,7 +862,11 @@ def detect_c_code(
 
     # Priority 5: Fallback to source/ directory
     source_dir = repo_path / "source"
-    if source_dir.exists() and source_dir.is_dir() and _contains_c_files(source_dir, c_extensions):
+    if (
+        source_dir.exists()
+        and source_dir.is_dir()
+        and _contains_c_files(source_dir, c_extensions)
+    ):
         return [source_dir.resolve()]
 
     return []
@@ -885,7 +1011,7 @@ def update_ruff_config(pyproject: PyprojectConfig) -> PyprojectConfig:
 
     # Ensure tool.ruff exists and is a table
     ruff_raw = tool.get("ruff")
-    ruff: TomlTable = cast(TomlTable, ruff_raw) if isinstance(ruff_raw, dict) else {}
+    ruff: TomlTable = cast("TomlTable", ruff_raw) if isinstance(ruff_raw, dict) else {}
     tool["ruff"] = ruff
 
     # Ensure tool.ruff.lint exists and is a table
@@ -895,7 +1021,11 @@ def update_ruff_config(pyproject: PyprojectConfig) -> PyprojectConfig:
 
     # Ensure tool.ruff.lint.select exists and is a list of strings
     select_raw = lint.get("select")
-    select: list[str] = [s for s in select_raw if isinstance(s, str)] if isinstance(select_raw, list) else []
+    select: list[str] = (
+        [s for s in select_raw if isinstance(s, str)]
+        if isinstance(select_raw, list)
+        else []
+    )
     lint["select"] = select
 
     # Add docstring rules if not present
@@ -940,17 +1070,27 @@ def create_mkdocs_config(
     template = env.from_string(MKDOCS_YML_TEMPLATE)
 
     # Convert absolute Path objects to relative string paths for template
-    c_source_dirs_relative = [str(path.relative_to(repo_path)) for path in c_source_dirs]
+    c_source_dirs_relative = [
+        str(path.relative_to(repo_path)) for path in c_source_dirs
+    ]
 
     # Prepare CLI module information for template
-    cli_modules_list = cli_modules if cli_modules else []
+    cli_modules_list = cli_modules or []
     cli_nav_items: list[dict[str, str]] = []
     if cli_modules_list:
         for cli_module in cli_modules_list:
             module_parts = cli_module.split(".")
-            friendly_name = "-".join(module_parts[1:]) if len(module_parts) > 1 else module_parts[0]
-            display_name = " ".join(word.capitalize() for word in friendly_name.split("-"))
-            filename = f"cli-api-{friendly_name}.md" if len(cli_modules_list) > 1 else "cli-api.md"
+            friendly_name = (
+                "-".join(module_parts[1:]) if len(module_parts) > 1 else module_parts[0]
+            )
+            display_name = " ".join(
+                word.capitalize() for word in friendly_name.split("-")
+            )
+            filename = (
+                f"cli-api-{friendly_name}.md"
+                if len(cli_modules_list) > 1
+                else "cli-api.md"
+            )
             cli_nav_items.append({"display_name": display_name, "filename": filename})
 
     content = template.render(
@@ -989,7 +1129,7 @@ def _is_pages_job(job: dict[str, object]) -> bool:
         True if job is a Pages deployment job.
     """
     # Check steps for actions/deploy-pages
-    steps: list[object] = cast(list[object], job.get("steps", []))
+    steps: list[object] = cast("list[object]", job.get("steps", []))
     for step in steps:
         if isinstance(step, dict) and "uses" in step:
             uses = str(step["uses"])
@@ -1017,7 +1157,7 @@ def _uses_mkapidocs(job: dict[str, object]) -> bool:
     Returns:
         True if job uses mkapidocs.
     """
-    steps: list[object] = cast(list[object], job.get("steps", []))
+    steps: list[object] = cast("list[object]", job.get("steps", []))
     for step in steps:
         if isinstance(step, dict) and "run" in step:
             run_cmd = str(step["run"])
@@ -1035,21 +1175,19 @@ def _check_existing_github_workflow(workflow_file: Path) -> bool:
     Returns:
         True if Pages deployment is found.
     """
-    from mkapidocs.yaml_utils import load_yaml_from_path
-
     workflow = load_yaml_from_path(workflow_file)
 
     if workflow is None or "jobs" not in workflow:
         return False
 
-    jobs = cast(dict[str, object], workflow.get("jobs", {}))
+    jobs = cast("dict[str, object]", workflow.get("jobs", {}))
 
     for job_name, job in jobs.items():
         if not isinstance(job, dict):
             continue
 
         # Cast job to dict[str, object] for helper functions
-        job_dict = cast(dict[str, object], job)
+        job_dict = cast("dict[str, object]", job)
 
         if _is_pages_job(job_dict):
             if _uses_mkapidocs(job_dict):
@@ -1132,17 +1270,24 @@ def _check_existing_gitlab_ci(gitlab_ci_path: Path) -> bool:
         for inc in includes:
             if isinstance(inc, GitLabIncludeLocal):
                 if _strip_quotes(inc.local) == ".gitlab/workflows/pages.gitlab-ci.yml":
-                    console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
+                    console.print(
+                        "[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]"
+                    )
                     return True
-            elif isinstance(inc, str) and _strip_quotes(inc) == ".gitlab/workflows/pages.gitlab-ci.yml":
-                console.print("[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]")
+            elif (
+                isinstance(inc, str)
+                and _strip_quotes(inc) == ".gitlab/workflows/pages.gitlab-ci.yml"
+            ):
+                console.print(
+                    "[green]Found existing pages workflow include in '.gitlab-ci.yml'.[/green]"
+                )
                 return True
 
     return False
 
 
-def _ensure_deploy_stage(gitlab_ci_path: Path) -> None:
-    """Ensure 'deploy' stage exists in .gitlab-ci.yml.
+def _ensure_pages_stage(gitlab_ci_path: Path) -> None:
+    """Ensure 'pages' stage exists in .gitlab-ci.yml.
 
     Args:
         gitlab_ci_path: Path to .gitlab-ci.yml.
@@ -1154,12 +1299,14 @@ def _ensure_deploy_stage(gitlab_ci_path: Path) -> None:
         config = GitLabCIConfig.load(gitlab_ci_path)
         if config:
             stages = config.stages or []
-            if "deploy" not in stages:
-                if GitLabCIConfig.add_stage_and_save(gitlab_ci_path, "deploy"):
-                    console.print(f"[green]:white_check_mark: Added 'deploy' stage to {gitlab_ci_path.name}[/green]")
+            if "pages" not in stages:
+                if GitLabCIConfig.add_stage_and_save(gitlab_ci_path, "pages"):
+                    console.print(
+                        f"[green]:white_check_mark: Added 'pages' stage to {gitlab_ci_path.name}[/green]"
+                    )
                 else:
                     console.print(
-                        f"[yellow]Could not automatically add 'deploy' stage to {gitlab_ci_path.name}. Please add it manually.[/yellow]"
+                        f"[yellow]Could not automatically add 'pages' stage to {gitlab_ci_path.name}. Please add it manually.[/yellow]"
                     )
 
 
@@ -1181,7 +1328,9 @@ def create_gitlab_ci(repo_path: Path) -> None:
     # Write pages workflow file (only if doesn't exist)
     if not pages_workflow_path.exists():
         _ = pages_workflow_path.write_text(GITLAB_CI_PAGES_TEMPLATE, encoding="utf-8")
-        console.print(f"[green]:white_check_mark: Created {pages_workflow_path.relative_to(repo_path)}[/green]")
+        console.print(
+            f"[green]:white_check_mark: Created {pages_workflow_path.relative_to(repo_path)}[/green]"
+        )
 
     # Check for existing include
     if _check_existing_gitlab_ci(gitlab_ci_path):
@@ -1193,23 +1342,38 @@ def create_gitlab_ci(repo_path: Path) -> None:
         # Modify existing file
         try:
             if GitLabCIConfig.add_include_and_save(gitlab_ci_path, include_entry):
-                console.print(f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]")
+                console.print(
+                    f"[green]:white_check_mark: Added include to {gitlab_ci_path.name}[/green]"
+                )
             else:
                 # Fallback to append if structure is weird
                 with gitlab_ci_path.open("a", encoding="utf-8") as f:
-                    f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
-                console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+                    f.write(
+                        "\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+                    )
+                console.print(
+                    f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]"
+                )
 
         except (YAMLError, OSError):
             # Fallback to append
             with gitlab_ci_path.open("a", encoding="utf-8") as f:
-                f.write("\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
-            console.print(f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]")
+                f.write(
+                    "\ninclude:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+                )
+            console.print(
+                f"[green]:white_check_mark: Appended include to {gitlab_ci_path.name}[/green]"
+            )
     else:
         # Create new file
         initial_content = "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
         _ = gitlab_ci_path.write_text(initial_content, encoding="utf-8")
-        console.print(f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]")
+        console.print(
+            f"[green]:white_check_mark: Created {gitlab_ci_path.name}[/green]"
+        )
+
+    # Ensure 'pages' stage exists (required for the pages job)
+    _ensure_pages_stage(gitlab_ci_path)
 
 
 def create_index_page(
@@ -1262,7 +1426,10 @@ def create_index_page(
 
 
 def create_api_reference(
-    repo_path: Path, project_name: str, c_source_dirs: list[Path], cli_modules: list[str] | None = None
+    repo_path: Path,
+    project_name: str,
+    c_source_dirs: list[Path],
+    cli_modules: list[str] | None = None,
 ) -> None:
     """Create API reference documentation pages.
 
@@ -1298,12 +1465,18 @@ def create_api_reference(
             # e.g., "package.cli" -> "cli", "package.tool2.main" -> "tool2-main"
             module_parts = cli_module.split(".")
             # Remove package name prefix and join remaining parts
-            friendly_name = "-".join(module_parts[1:]) if len(module_parts) > 1 else module_parts[0]
+            friendly_name = (
+                "-".join(module_parts[1:]) if len(module_parts) > 1 else module_parts[0]
+            )
 
             cli_content = cli_template.render(
-                project_name=project_name, package_name=package_name, cli_module=cli_module
+                project_name=project_name,
+                package_name=package_name,
+                cli_module=cli_module,
             )
-            filename = f"cli-api-{friendly_name}.md" if len(cli_modules) > 1 else "cli-api.md"
+            filename = (
+                f"cli-api-{friendly_name}.md" if len(cli_modules) > 1 else "cli-api.md"
+            )
             _ = (generated_dir / filename).write_text(cli_content)
 
 
@@ -1332,21 +1505,33 @@ def create_generated_content(
 
     # index-features.md
     features: list[str] = []
-    features.append("## Key Features\n")
-    features.append("- **[Python API Reference](python-api.md)** - Complete API documentation")
+    features.extend((
+        "## Key Features\n",
+        "- **[Python API Reference](python-api.md)** - Complete API documentation",
+    ))
 
     if cli_modules:
         if len(cli_modules) == 1:
-            features.append("- **[CLI Reference](cli-api.md)** - Command-line interface")
+            features.append(
+                "- **[CLI Reference](cli-api.md)** - Command-line interface"
+            )
         else:
             # Multiple CLI apps - link to each one
             features.append("- **CLI References:**")
             for cli_module in cli_modules:
                 module_parts = cli_module.split(".")
-                friendly_name = "-".join(module_parts[1:]) if len(module_parts) > 1 else module_parts[0]
+                friendly_name = (
+                    "-".join(module_parts[1:])
+                    if len(module_parts) > 1
+                    else module_parts[0]
+                )
                 # Create a nice display name (e.g., "tool2-main" -> "Tool2 Main")
-                display_name = " ".join(word.capitalize() for word in friendly_name.split("-"))
-                features.append(f"  - **[{display_name}](cli-api-{friendly_name}.md)** - CLI interface")
+                display_name = " ".join(
+                    word.capitalize() for word in friendly_name.split("-")
+                )
+                features.append(
+                    f"  - **[{display_name}](cli-api-{friendly_name}.md)** - CLI interface"
+                )
 
     if c_source_dirs:
         features.append("- **[C API Reference](c-api.md)** - C/C++ API documentation")
@@ -1375,7 +1560,9 @@ uv add {project_name}
     _ = (generated_dir / "install-command.md").write_text(install_content)
 
 
-def update_gitignore(repo_path: Path, provider: CIProvider, include_generated: bool = False) -> None:
+def update_gitignore(
+    repo_path: Path, provider: CIProvider, include_generated: bool = False
+) -> None:
     """Update .gitignore to exclude MkDocs build artifacts.
 
     Adds build directory (/site/ for GitHub, /public/ for GitLab) and .mkdocs_cache/
@@ -1409,7 +1596,9 @@ def update_gitignore(repo_path: Path, provider: CIProvider, include_generated: b
         # Check if entry exists (as exact match or without leading slash)
         normalized_entry = entry.lstrip("/")
         is_present = any(
-            line.strip() == entry or line.strip() == normalized_entry or line.strip() == f"/{normalized_entry}"
+            line.strip() == entry
+            or line.strip() == normalized_entry
+            or line.strip() == f"/{normalized_entry}"
             for line in existing_lines
         )
         if not is_present:
@@ -1530,7 +1719,11 @@ def _detect_gitlab_site_url(repo_path: Path) -> str:
             "[bold]After setup:[/bold]\n"
             "Edit [cyan]mkdocs.yml[/cyan] and update [cyan]site_url[/cyan] to the correct value."
         )
-        display_message(warning_message, MessageType.WARNING, title="GitLab URL - Manual Configuration Required")
+        display_message(
+            warning_message,
+            MessageType.WARNING,
+            title="GitLab URL - Manual Configuration Required",
+        )
         return detected_url
 
     host, namespace, project = gitlab_info
@@ -1544,7 +1737,9 @@ def _detect_gitlab_site_url(repo_path: Path) -> str:
     if api_result.url:
         detected_url = api_result.url.rstrip("/")
         display_message(
-            f"GitLab Pages URL retrieved from API: [cyan]{detected_url}[/cyan]", MessageType.SUCCESS, title=title_prefix
+            f"GitLab Pages URL retrieved from API: [cyan]{detected_url}[/cyan]",
+            MessageType.SUCCESS,
+            title=title_prefix,
         )
         return detected_url
 
@@ -1570,7 +1765,11 @@ def _detect_gitlab_site_url(repo_path: Path) -> str:
         "[bold]After setup:[/bold]\n"
         "Edit [cyan]mkdocs.yml[/cyan] and update [cyan]site_url[/cyan] if the URL is incorrect."
     )
-    display_message(warning_message, MessageType.WARNING, title=f"{title_prefix} - URL May Need Adjustment")
+    display_message(
+        warning_message,
+        MessageType.WARNING,
+        title=f"{title_prefix} - URL May Need Adjustment",
+    )
     return detected_url
 
 
@@ -1587,8 +1786,6 @@ def _detect_provider_and_url(
     Returns:
         Tuple containing (detected_provider, site_url).
     """
-    import typer
-
     # Auto-detect provider if not specified
     if provider is None:
         provider = detect_ci_provider(repo_path)
@@ -1601,7 +1798,9 @@ def _detect_provider_and_url(
                 "[bold]Solution:[/bold]\n"
                 "Explicitly specify provider with [cyan]--provider github[/cyan] or [cyan]--provider gitlab[/cyan]"
             )
-            display_message(error_message, MessageType.ERROR, title="Provider Detection Failed")
+            display_message(
+                error_message, MessageType.ERROR, title="Provider Detection Failed"
+            )
             raise typer.Exit(1)
 
     # If site_url is explicitly provided, use it directly
@@ -1612,7 +1811,9 @@ def _detect_provider_and_url(
     if provider == CIProvider.GITHUB:
         github_url_base = detect_github_url_base(repo_path)
         if github_url_base is None:
-            raise ValueError("Could not auto-detect GitHub URL from git remote. Please provide --site-url option.")
+            raise ValueError(
+                "Could not auto-detect GitHub URL from git remote. Please provide --site-url option."
+            )
         return provider, github_url_base.rstrip("/")
 
     # GitLab provider
@@ -1632,9 +1833,9 @@ def _detect_features(
     Returns:
         Tuple containing (c_source_dirs_list, cli_modules, has_typer, has_private_registry, private_registry_url).
     """
-    import typer
-
-    c_source_dirs_list = detect_c_code(repo_path, explicit_dirs=c_source_dirs, pyproject=pyproject)
+    c_source_dirs_list = detect_c_code(
+        repo_path, explicit_dirs=c_source_dirs, pyproject=pyproject
+    )
     has_typer = detect_typer_dependency(pyproject)
     has_private_registry, private_registry_url = detect_private_registry(pyproject)
 
@@ -1656,10 +1857,18 @@ def _detect_features(
                 "Python files that import Typer and instantiate [cyan]Typer()[/cyan]\n"
                 "Example: [cyan]import typer[/cyan] and [cyan]app = typer.Typer()[/cyan]"
             )
-            display_message(error_message, MessageType.ERROR, title="Typer CLI Not Found")
+            display_message(
+                error_message, MessageType.ERROR, title="Typer CLI Not Found"
+            )
             raise typer.Exit(1)
 
-    return c_source_dirs_list, cli_modules, has_typer, has_private_registry, private_registry_url
+    return (
+        c_source_dirs_list,
+        cli_modules,
+        has_typer,
+        has_private_registry,
+        private_registry_url,
+    )
 
 
 @dataclass
@@ -1696,15 +1905,21 @@ def setup_documentation(
 
     project_name, description, license_name = _get_project_info(pyproject)
     provider, final_site_url = _detect_provider_and_url(repo_path, provider, site_url)
-    c_source_dirs_list, cli_modules, _, has_private_registry, private_registry_url = _detect_features(
-        repo_path, pyproject, c_source_dirs
+    c_source_dirs_list, cli_modules, _, has_private_registry, private_registry_url = (
+        _detect_features(repo_path, pyproject, c_source_dirs)
     )
 
     # has_typer_cli flag is True if CLI modules were actually detected
     has_typer_cli = len(cli_modules) > 0
 
     is_first_run = create_mkdocs_config(
-        repo_path, project_name, final_site_url, c_source_dirs_list, has_typer_cli, provider, cli_modules
+        repo_path,
+        project_name,
+        final_site_url,
+        c_source_dirs_list,
+        has_typer_cli,
+        provider,
+        cli_modules,
     )
 
     # Create CI/CD configuration based on provider
@@ -1725,10 +1940,21 @@ def setup_documentation(
     )
     create_api_reference(repo_path, project_name, c_source_dirs_list, cli_modules)
     create_generated_content(
-        repo_path, project_name, c_source_dirs_list, cli_modules, has_private_registry, private_registry_url
+        repo_path,
+        project_name,
+        c_source_dirs_list,
+        cli_modules,
+        has_private_registry,
+        private_registry_url,
     )
     create_supporting_docs(
-        repo_path, project_name, pyproject, c_source_dirs_list, has_typer_cli, final_site_url, git_url=None
+        repo_path,
+        project_name,
+        pyproject,
+        c_source_dirs_list,
+        has_typer_cli,
+        final_site_url,
+        git_url=None,
     )
 
     update_gitignore(repo_path, provider)
@@ -1736,4 +1962,8 @@ def setup_documentation(
     # Add mkapidocs to target project's dev dependencies
     mkapidocs_installed = ensure_mkapidocs_installed(repo_path)
 
-    return SetupResult(provider=provider, is_first_run=is_first_run, mkapidocs_installed=mkapidocs_installed)
+    return SetupResult(
+        provider=provider,
+        is_first_run=is_first_run,
+        mkapidocs_installed=mkapidocs_installed,
+    )

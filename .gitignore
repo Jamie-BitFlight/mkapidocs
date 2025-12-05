@@ -54,7 +54,6 @@ coverage.xml
 
 # uv
 .uv-cache/
-uv.lock
 
 # GitLab CI
 .gitlab-ci-local/

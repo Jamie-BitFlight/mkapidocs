@@ -1,8 +1,9 @@
 pages:
-  stage: deploy
+  stage: pages
   image: ghcr.io/astral-sh/uv:python3.11
+  pages: true
   script:
-    - uv run mkapidocs build . --strict
+    - uv run --with mkapidocs mkapidocs build . --strict
   artifacts:
     paths:
       - public
