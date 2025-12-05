@@ -31,7 +31,7 @@ TODO: Add usage examples
 
 ## API Reference
 
-- [Python API](reference/python.md)
+- [Python API](generated/python-api.md)
 
 ## Contributing
 

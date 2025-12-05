@@ -91,7 +91,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Install python-semantic-release
-        run: uvx --from python-semantic-release==9.0.0 semantic-release --version
+        run: uvx --from python-semantic-release==9.21.1 semantic-release --version
 
       - name: Python Semantic Release
         id: release

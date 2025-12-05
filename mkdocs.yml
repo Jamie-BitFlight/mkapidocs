@@ -58,7 +58,7 @@ markdown_extensions:
 nav:
 - Home: index.md
 - API Reference:
-  - Python API: reference/python.md
+  - Python API: generated/python-api.md
 not_in_nav: |
   generated/index-features.md
   generated/install-command.md
