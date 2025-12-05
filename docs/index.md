@@ -1,42 +1,23 @@
 # mkapidocs
 
-Automated documentation setup tool for Python projects using MkDocs and GitHub Pages
+Automated documentation setup tool for Python projects using MkDocs with GitHub Pages or GitLab Pages. Intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, CI/CD workflows, and docstring linting configuration.
+
+--8<-- "generated/index-features.md"
 
 ## Quick Start
 
-TODO: Add quick start guide
-
-## Features
-
-TODO: Add feature list
-
-## Installation
-
 ```bash
-# Download the script
-curl -O https://github.com/Jamie-BitFlight/mkapidocs/releases/latest/download/mkapidocs
-chmod +x mkapidocs
-
-# Or run directly with uvx (no installation needed)
-uvx --from https://github.com/Jamie-BitFlight/mkapidocs/releases/latest/download/mkapidocs mkapidocs --help
+uv pip install mkapidocs
 ```
 
-## Usage
+--8<-- "generated/install-registry.md"
 
-TODO: Add usage examples
+For detailed installation instructions, see the [Installation Guide](install.md).
 
 ## Recently Updated
 
 <!-- RECENTLY_UPDATED_DOCS -->
 
-## API Reference
-
-- [Python API](generated/python-api.md)
-
-## Contributing
-
-TODO: Add contributing guidelines
-
 ## License
 
-TODO: Add license information
+Unlicense

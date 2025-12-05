@@ -8,9 +8,7 @@ INDEX_MD_TEMPLATE = """# {{ project_name }}
 
 ## Quick Start
 
-```bash
-uv pip install {{ project_name }}
-```
+--8<-- "generated/install-command.md"
 
 --8<-- "generated/install-registry.md"
 

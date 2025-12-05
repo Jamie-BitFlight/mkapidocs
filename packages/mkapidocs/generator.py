@@ -1246,6 +1246,7 @@ def create_generated_content(
     cli_modules: list[str],
     has_private_registry: bool,
     private_registry_url: str | None,
+    has_scripts: bool,
 ) -> None:
     """Create generated content snippets for inclusion in user docs.
 
@@ -1258,6 +1259,7 @@ def create_generated_content(
         cli_modules: List of detected CLI modules (empty if none).
         has_private_registry: Whether project uses private registry.
         private_registry_url: URL of private registry if configured.
+        has_scripts: Whether project has CLI scripts in [project.scripts].
     """
     generated_dir = repo_path / "docs" / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
@@ -1298,24 +1300,42 @@ def create_generated_content(
     features_content = "\n".join(features) + "\n"
     _ = (generated_dir / "index-features.md").write_text(features_content)
 
-    # install-command.md
+    # install-command.md - context-aware install instructions
+    install_lines: list[str] = []
+
+    # CLI tool installation (only if project has scripts)
+    if has_scripts:
+        install_lines.extend(("To install as a CLI tool:", "", "```bash"))
+        if has_private_registry and private_registry_url:
+            install_lines.append(
+                f'uv tool install --index="{private_registry_url}" {project_name}'
+            )
+        else:
+            install_lines.append(f"uv tool install {project_name}")
+        install_lines.extend(("```", ""))
+
+    # Package dependency installation
+    install_lines.extend(("To add to your project dependencies:", "", "```bash"))
     if has_private_registry and private_registry_url:
-        # Private registry installation
-        install_content = f"""To install from the private registry:
-
-```bash
-uv add --index="{private_registry_url}" {project_name}
-```
-"""
+        install_lines.append(f'uv add --index="{private_registry_url}" {project_name}')
     else:
-        # Standard installation
-        install_content = f"""To install the package:
+        install_lines.append(f"uv add {project_name}")
+    install_lines.extend((
+        "```",
+        "",
+        "To add as a development dependency:",
+        "",
+        "```bash",
+    ))
+    if has_private_registry and private_registry_url:
+        install_lines.append(
+            f'uv add --dev --index="{private_registry_url}" {project_name}'
+        )
+    else:
+        install_lines.append(f"uv add --dev {project_name}")
+    install_lines.append("```")
 
-```bash
-uv add {project_name}
-```
-"""
-
+    install_content = "\n".join(install_lines) + "\n"
     _ = (generated_dir / "install-command.md").write_text(install_content)
 
 
@@ -1705,6 +1725,7 @@ def setup_documentation(
         cli_modules,
         has_private_registry,
         private_registry_url,
+        pyproject.has_scripts,
     )
     create_supporting_docs(
         repo_path,

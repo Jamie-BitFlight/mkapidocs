@@ -53,6 +53,7 @@ class ProjectConfig(BaseModel):
     requires_python: str | None = Field(default=None, alias="requires-python")
     dependencies: list[str] = Field(default_factory=list)
     license: str | dict[str, str] | None = None
+    scripts: dict[str, str] = Field(default_factory=dict)
 
 
 class PyprojectConfig(BaseModel):
@@ -116,6 +117,11 @@ class PyprojectConfig(BaseModel):
         if isinstance(val, str):
             return val
         return None
+
+    @property
+    def has_scripts(self) -> bool:
+        """Check if project defines CLI scripts in [project.scripts]."""
+        return bool(self.project.scripts)
 
     @classmethod
     def from_dict(cls, data: TomlTable) -> PyprojectConfig:

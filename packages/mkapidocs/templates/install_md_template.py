@@ -27,10 +27,7 @@ git clone {{ git_url if git_url else "REPOSITORY_URL" }}
 cd {{ project_name }}
 
 # Install with all dependencies
-uv sync --all-extras
-
-# Or install specific extras
-uv sync --extra dev
+uv sync
 ```
 {% if c_source_dirs %}
 
