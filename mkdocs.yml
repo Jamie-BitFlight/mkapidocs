@@ -13,7 +13,6 @@ not_in_nav: |
 theme:
   name: material
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
@@ -77,7 +76,4 @@ nav:
       - Installation: install.md
   - API Reference:
       - Python API: generated/python-api.md
-
-
-
       - CLI Reference: generated/cli-api.md

@@ -85,19 +85,19 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started:
-    - Installation: install.md
+      - Installation: install.md
   - API Reference:
-    - Python API: generated/python-api.md
-{% if c_source_dirs %}
-    - C API: generated/c-api.md
-{% endif %}
-{% if has_typer %}
-{% if cli_modules|length == 1 %}
-    - CLI Reference: generated/{{ cli_modules[0].filename }}
-{% else %}
-    - CLI Reference:
-{% for cli_item in cli_modules %}
-      - {{ cli_item.display_name }}: generated/{{ cli_item.filename }}
-{% endfor %}
-{% endif %}
-{% endif %}
+      - Python API: generated/python-api.md
+{%- if c_source_dirs %}
+      - C API: generated/c-api.md
+{%- endif %}
+{%- if has_typer %}
+{%- if cli_modules|length == 1 %}
+      - CLI Reference: generated/{{ cli_modules[0].filename }}
+{%- else %}
+      - CLI Reference:
+{%- for cli_item in cli_modules %}
+          - {{ cli_item.display_name }}: generated/{{ cli_item.filename }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
