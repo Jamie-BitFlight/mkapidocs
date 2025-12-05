@@ -11,7 +11,9 @@ Tests cover:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+from ruamel.yaml import YAML
 
 from mkapidocs.generator import (
     create_api_reference,
@@ -22,7 +24,9 @@ from mkapidocs.generator import (
     update_gitignore,
 )
 from mkapidocs.models import CIProvider
-from ruamel.yaml import YAML
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestCreateMkdocsConfig:
@@ -124,7 +128,9 @@ class TestCreateMkdocsConfig:
 
         assert "mkdocs-typer2" in rendered_content
 
-    def test_excludes_typer_plugin_when_not_detected(self, mock_repo_path: Path) -> None:
+    def test_excludes_typer_plugin_when_not_detected(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test mkdocs.yml excludes mkdocs-typer2 plugin when Typer not detected.
 
         Tests: Conditional plugin exclusion for non-Typer projects
@@ -150,7 +156,9 @@ class TestCreateMkdocsConfig:
 
         assert "mkdocs-typer2" not in rendered_content
 
-    def test_adds_mkdoxy_plugin_when_c_code_detected(self, mock_repo_path: Path) -> None:
+    def test_adds_mkdoxy_plugin_when_c_code_detected(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test mkdocs.yml includes mkdoxy plugin when C/C++ code detected.
 
         Tests: Conditional plugin inclusion for C/C++ projects
@@ -311,7 +319,9 @@ nav:
         assert "site_dir: site" in content
         assert "site_dir: public" not in content
 
-    def test_gitlab_provider_sets_site_dir_to_public(self, mock_repo_path: Path) -> None:
+    def test_gitlab_provider_sets_site_dir_to_public(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test that GitLab provider configures site_dir: public in mkdocs.yml.
 
         Tests: site_dir configuration based on CI provider
@@ -603,13 +613,20 @@ class TestCreateAPIReference:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(repo_path=mock_repo_path, project_name="test-project", c_source_dirs=[], cli_modules=None)
+        create_api_reference(
+            repo_path=mock_repo_path,
+            project_name="test-project",
+            c_source_dirs=[],
+            cli_modules=None,
+        )
 
         # Assert
         python_api_path = mock_repo_path / "docs" / "generated" / "python-api.md"
         assert python_api_path.exists()
 
-    def test_python_api_contains_mkdocstrings_directive(self, mock_repo_path: Path) -> None:
+    def test_python_api_contains_mkdocstrings_directive(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test Python API reference contains mkdocstrings directive.
 
         Tests: Template uses ::: syntax for mkdocstrings
@@ -620,7 +637,12 @@ class TestCreateAPIReference:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(repo_path=mock_repo_path, project_name="my-package", c_source_dirs=[], cli_modules=None)
+        create_api_reference(
+            repo_path=mock_repo_path,
+            project_name="my-package",
+            c_source_dirs=[],
+            cli_modules=None,
+        )
 
         # Assert
         python_api_path = mock_repo_path / "docs" / "generated" / "python-api.md"
@@ -663,7 +685,10 @@ class TestCreateAPIReference:
         """
         # Arrange & Act
         create_api_reference(
-            repo_path=mock_repo_path, project_name="python-project", c_source_dirs=[], cli_modules=None
+            repo_path=mock_repo_path,
+            project_name="python-project",
+            c_source_dirs=[],
+            cli_modules=None,
         )
 
         # Assert
@@ -682,7 +707,10 @@ class TestCreateAPIReference:
         """
         # Arrange & Act
         create_api_reference(
-            repo_path=mock_repo_path, project_name="cli-project", c_source_dirs=[], cli_modules=["cli_project.cli"]
+            repo_path=mock_repo_path,
+            project_name="cli-project",
+            c_source_dirs=[],
+            cli_modules=["cli_project.cli"],
         )
 
         # Assert
@@ -725,7 +753,12 @@ class TestCreateAPIReference:
             mock_repo_path: Temporary repository directory
         """
         # Arrange & Act
-        create_api_reference(repo_path=mock_repo_path, project_name="lib-project", c_source_dirs=[], cli_modules=None)
+        create_api_reference(
+            repo_path=mock_repo_path,
+            project_name="lib-project",
+            c_source_dirs=[],
+            cli_modules=None,
+        )
 
         # Assert
         cli_api_path = mock_repo_path / "docs" / "generated" / "cli-api.md"
@@ -757,6 +790,7 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=False,
         )
 
         # Assert
@@ -781,6 +815,7 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=False,
         )
 
         # Assert
@@ -790,7 +825,9 @@ class TestCreateGeneratedContent:
         assert "Python API Reference" in content
         assert "python-api.md" in content
 
-    def test_features_includes_cli_link_when_typer_detected(self, mock_repo_path: Path) -> None:
+    def test_features_includes_cli_link_when_typer_detected(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test features snippet includes CLI reference when Typer detected.
 
         Tests: Conditional CLI reference link in features list
@@ -808,6 +845,7 @@ class TestCreateGeneratedContent:
             cli_modules=["cli_project.cli"],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=True,
         )
 
         # Assert
@@ -817,7 +855,9 @@ class TestCreateGeneratedContent:
         assert "CLI Reference" in content
         assert "cli-api.md" in content
 
-    def test_features_includes_c_api_link_when_c_code_detected(self, mock_repo_path: Path) -> None:
+    def test_features_includes_c_api_link_when_c_code_detected(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test features snippet includes C API reference when C code detected.
 
         Tests: Conditional C API reference link in features list
@@ -835,6 +875,7 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=False,
         )
 
         # Assert
@@ -859,13 +900,16 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=False,
         )
 
         # Assert
         command_path = mock_repo_path / "docs" / "generated" / "install-command.md"
         assert command_path.exists()
 
-    def test_install_command_snippet_includes_private_registry_command(self, mock_repo_path: Path) -> None:
+    def test_install_command_snippet_includes_private_registry_command(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test install command snippet includes private registry flag.
 
         Tests: Private registry install instructions
@@ -880,6 +924,7 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=True,
             private_registry_url="https://private.pypi.org/simple",
+            has_scripts=False,
         )
 
         # Assert
@@ -890,7 +935,9 @@ class TestCreateGeneratedContent:
         assert '--index="https://private.pypi.org/simple"' in content
         assert "private-project" in content
 
-    def test_install_command_snippet_includes_standard_command(self, mock_repo_path: Path) -> None:
+    def test_install_command_snippet_includes_standard_command(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test install command snippet includes standard command when no private registry.
 
         Tests: Standard install instructions
@@ -905,6 +952,7 @@ class TestCreateGeneratedContent:
             cli_modules=[],
             has_private_registry=False,
             private_registry_url=None,
+            has_scripts=False,
         )
 
         # Assert
@@ -982,7 +1030,9 @@ class TestUpdateGitignore:
         assert ".mkdocs_cache/" in content
         assert "/site/" not in content
 
-    def test_update_gitignore_github_skips_duplicate_entries(self, tmp_path: Path) -> None:
+    def test_update_gitignore_github_skips_duplicate_entries(
+        self, tmp_path: Path
+    ) -> None:
         """Test that GitHub entries are not duplicated if already present."""
         # Arrange
         gitignore_path = tmp_path / ".gitignore"
@@ -997,7 +1047,9 @@ class TestUpdateGitignore:
         assert content.count("/site/") == 1
         assert content.count(".mkdocs_cache/") == 1
 
-    def test_update_gitignore_gitlab_skips_duplicate_entries(self, tmp_path: Path) -> None:
+    def test_update_gitignore_gitlab_skips_duplicate_entries(
+        self, tmp_path: Path
+    ) -> None:
         """Test that GitLab entries are not duplicated if already present."""
         # Arrange
         gitignore_path = tmp_path / ".gitignore"
@@ -1012,7 +1064,9 @@ class TestUpdateGitignore:
         assert content.count("/public/") == 1
         assert content.count(".mkdocs_cache/") == 1
 
-    def test_update_gitignore_includes_generated_when_requested(self, tmp_path: Path) -> None:
+    def test_update_gitignore_includes_generated_when_requested(
+        self, tmp_path: Path
+    ) -> None:
         """Test that docs/generated/ is added when include_generated=True."""
         # Arrange
 
@@ -1026,7 +1080,9 @@ class TestUpdateGitignore:
         assert ".mkdocs_cache/" in content
         assert "docs/generated/" in content
 
-    def test_update_gitignore_excludes_generated_by_default(self, tmp_path: Path) -> None:
+    def test_update_gitignore_excludes_generated_by_default(
+        self, tmp_path: Path
+    ) -> None:
         """Test that docs/generated/ is not added by default."""
         # Arrange
 
