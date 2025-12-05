@@ -188,6 +188,7 @@ def setup(
         Path | None,
         typer.Argument(
             help="Path to Python repository to set up documentation for",
+            metavar="directory",
             resolve_path=True,
         ),
     ] = None,
@@ -319,6 +320,7 @@ def build(
         Path | None,
         typer.Argument(
             help="Path to Python repository to build documentation for",
+            metavar="directory",
             resolve_path=True,
         ),
     ] = None,
@@ -408,6 +410,7 @@ def serve(
         Path | None,
         typer.Argument(
             help="Path to Python repository to serve documentation for",
+            metavar="directory",
             resolve_path=True,
         ),
     ] = None,
