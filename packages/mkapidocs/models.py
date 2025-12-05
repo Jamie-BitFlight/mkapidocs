@@ -5,15 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from enum import Enum
-from pathlib import Path
-from typing import ClassVar, TypeAlias, cast
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from mkapidocs.yaml_utils import append_to_yaml_list, load_yaml_from_path
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # TOML spec v1.0.0 types - https://toml.io/en/v1.0.0
 # These mirror the types in typings/tomlkit/__init__.pyi
 # Use string form to avoid runtime evaluation issues with forward references
-TomlPrimitive: TypeAlias = "str | int | float | bool | date | time | datetime"
+TomlPrimitive: TypeAlias = str | int | float | bool | date | time | datetime
 TomlArray: TypeAlias = "list[str] | list[int] | list[float] | list[bool] | list[date] | list[time] | list[datetime] | list[TomlTable] | list[TomlArray]"
 TomlValue: TypeAlias = "TomlPrimitive | TomlArray | TomlTable"
 TomlTable: TypeAlias = "dict[str, TomlValue]"
@@ -65,7 +69,7 @@ class PyprojectConfig(BaseModel):
     @property
     def tool_typed(self) -> TomlTable:
         """Get tool table with proper TOML typing for external code."""
-        return cast(TomlTable, self.tool)
+        return cast("TomlTable", self.tool)
 
     @property
     def uv_index(self) -> list[dict[str, TomlValue]]:
@@ -73,12 +77,16 @@ class PyprojectConfig(BaseModel):
         uv = self.tool.get("uv", {})
         if not isinstance(uv, dict):
             return []
-        uv_table = cast(dict[str, object], uv)
+        uv_table = cast("dict[str, object]", uv)
         index = uv_table.get("index", [])
         if not isinstance(index, list):
             return []
-        index_list = cast(list[object], index)
-        return [cast(dict[str, TomlValue], item) for item in index_list if isinstance(item, dict)]
+        index_list = cast("list[object]", index)
+        return [
+            cast("dict[str, TomlValue]", item)
+            for item in index_list
+            if isinstance(item, dict)
+        ]
 
     @property
     def ruff_lint_select(self) -> list[str]:
@@ -86,15 +94,15 @@ class PyprojectConfig(BaseModel):
         ruff = self.tool.get("ruff", {})
         if not isinstance(ruff, dict):
             return []
-        ruff_table = cast(dict[str, object], ruff)
+        ruff_table = cast("dict[str, object]", ruff)
         lint = ruff_table.get("lint", {})
         if not isinstance(lint, dict):
             return []
-        lint_table = cast(dict[str, object], lint)
+        lint_table = cast("dict[str, object]", lint)
         select = lint_table.get("select", [])
         if not isinstance(select, list):
             return []
-        select_list = cast(list[object], select)
+        select_list = cast("list[object]", select)
         return [s for s in select_list if isinstance(s, str)]
 
     @property
@@ -103,7 +111,7 @@ class PyprojectConfig(BaseModel):
         pds = self.tool.get("pypis_delivery_service", {})
         if not isinstance(pds, dict):
             return None
-        pds_table = cast(dict[str, object], pds)
+        pds_table = cast("dict[str, object]", pds)
         val = pds_table.get("cmake_source_dir")
         if isinstance(val, str):
             return val
@@ -130,7 +138,10 @@ class PyprojectConfig(BaseModel):
         Returns:
             Dictionary with proper TOML types
         """
-        return cast(TomlTable, self.model_dump(by_alias=True, exclude_none=True, mode="python"))
+        return cast(
+            "TomlTable",
+            self.model_dump(by_alias=True, exclude_none=True, mode="python"),
+        )
 
 
 # GitLab CI include entry models
@@ -256,7 +267,11 @@ class GitLabCIConfig:
         if isinstance(raw_stages, list):
             stages = [str(s) for s in raw_stages]
 
-        return cls(include=cast(GitLabIncludeValueRaw | None, raw_include), stages=stages, extra=data_copy)
+        return cls(
+            include=cast("GitLabIncludeValueRaw | None", raw_include),
+            stages=stages,
+            extra=data_copy,
+        )
 
     @classmethod
     def load(cls, path: Path) -> GitLabCIConfig | None:
@@ -268,8 +283,6 @@ class GitLabCIConfig:
         Returns:
             GitLabCIConfig if file contains valid YAML dict, None otherwise.
         """
-        from mkapidocs.yaml_utils import load_yaml_from_path
-
         data = load_yaml_from_path(path)
         if data is not None:
             return cls.from_dict(data)
@@ -288,8 +301,6 @@ class GitLabCIConfig:
         Returns:
             True if successfully modified and saved, False if file structure invalid.
         """
-        from mkapidocs.yaml_utils import append_to_yaml_list
-
         return append_to_yaml_list(path, "include", include_entry)
 
     @classmethod
@@ -305,8 +316,6 @@ class GitLabCIConfig:
         Returns:
             True if successfully modified and saved, False if file structure invalid.
         """
-        from mkapidocs.yaml_utils import append_to_yaml_list
-
         return append_to_yaml_list(path, "stages", stage)
 
     @property

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import platform
+import shutil
 import subprocess
+import sys
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
-from typing import ClassVar, TypedDict, cast
+from typing import TYPE_CHECKING, ClassVar, TypedDict, cast
 
 import httpx
 import tomlkit
@@ -17,9 +20,16 @@ from rich import box
 from rich.console import Console
 from rich.measure import Measurement
 from rich.table import Table
+from tomlkit.exceptions import TOMLKitError
 
-# PyprojectConfig imported by detect_c_code and detect_typer_dependency in generator.py
-# which are called from check_c_code and check_typer_dependency methods
+from mkapidocs.project_detection import (
+    detect_c_code,
+    detect_typer_dependency,
+    read_pyproject,
+)
+
+if TYPE_CHECKING:
+    from mkapidocs.models import PyprojectConfig
 
 # Initialize Rich console for local output
 console = Console()
@@ -60,7 +70,9 @@ class GitHubRelease(TypedDict):
 class DoxygenInstaller:
     """Handles automatic Doxygen installation from GitHub releases."""
 
-    GITHUB_API_URL: ClassVar[str] = "https://api.github.com/repos/doxygen/doxygen/releases/latest"
+    GITHUB_API_URL: ClassVar[str] = (
+        "https://api.github.com/repos/doxygen/doxygen/releases/latest"
+    )
     CACHE_DIR: ClassVar[Path] = Path.home() / ".cache" / "doxygen-binaries"
     INSTALL_DIR: ClassVar[Path] = Path.home() / ".local" / "bin"
 
@@ -76,8 +88,18 @@ class DoxygenInstaller:
             return False, None
 
         try:
-            result = subprocess.run([doxygen_path, "--version"], capture_output=True, text=True, check=True, timeout=5)
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            result = subprocess.run(
+                [doxygen_path, "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+        except (
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+        ):
             return False, None
         else:
             version = result.stdout.strip()
@@ -109,72 +131,115 @@ class DoxygenInstaller:
                 return None
 
     @classmethod
+    def _get_unsupported_platform_message(cls) -> tuple[bool, str]:
+        """Get error message for unsupported platform.
+
+        Returns:
+            Tuple of (False, error_message)
+        """
+        system = platform.system()
+        if system == "Darwin":
+            return (
+                False,
+                "macOS detected: Please install Doxygen via Homebrew: brew install doxygen",
+            )
+        return False, f"Unsupported platform: {system} {platform.machine()}"
+
+    @classmethod
+    def _fetch_release_data(cls) -> GitHubRelease:
+        """Fetch Doxygen release data from GitHub API.
+
+        Returns:
+            GitHub release data
+
+        Raises:
+            httpx.HTTPError: If the request fails
+        """
+        console.print("[blue]Fetching Doxygen release information...[/blue]")
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(cls.GITHUB_API_URL)
+            _ = response.raise_for_status()
+            return cast("GitHubRelease", response.json())
+
+    @classmethod
+    def _find_matching_asset(
+        cls, release_data: GitHubRelease, asset_pattern: str
+    ) -> GitHubAsset | None:
+        """Find asset matching the platform pattern.
+
+        Args:
+            release_data: GitHub release data
+            asset_pattern: Glob pattern to match asset name
+
+        Returns:
+            Matching asset or None
+        """
+        for asset_item in release_data.get("assets", []):
+            if fnmatch.fnmatch(asset_item["name"], asset_pattern):
+                return asset_item
+        return None
+
+    @classmethod
+    def _download_asset(cls, asset_name: str, asset_url: str) -> Path:
+        """Download asset to cache directory.
+
+        Args:
+            asset_name: Name of the asset file
+            asset_url: URL to download from
+
+        Returns:
+            Path to downloaded file
+
+        Raises:
+            httpx.HTTPError: If download fails
+        """
+        console.print(f"[blue]Downloading {asset_name}...[/blue]")
+
+        cls.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        download_path: Path = cls.CACHE_DIR / asset_name
+
+        with (
+            httpx.Client(timeout=300.0, follow_redirects=True) as client,
+            client.stream("GET", asset_url) as dl_response,
+        ):
+            _ = dl_response.raise_for_status()
+            with download_path.open("wb") as f:
+                for chunk in dl_response.iter_bytes(chunk_size=8192):
+                    _ = f.write(chunk)
+
+        console.print(f"[green]Downloaded to {download_path}[/green]")
+        return download_path
+
+    @classmethod
     def download_and_install(cls) -> tuple[bool, str]:
         """Download and install Doxygen from GitHub releases.
 
         Returns:
             Tuple of (success, message)
         """
-        import fnmatch
-
         asset_pattern = cls.get_platform_asset_name()
         if asset_pattern is None:
-            system = platform.system()
-            if system == "Darwin":
-                return False, "macOS detected: Please install Doxygen via Homebrew: brew install doxygen"
-            return False, f"Unsupported platform: {system} {platform.machine()}"
+            return cls._get_unsupported_platform_message()
 
         try:
-            # Fetch latest release info
-            console.print("[blue]Fetching Doxygen release information...[/blue]")
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(cls.GITHUB_API_URL)
-                _ = response.raise_for_status()
-                release_data = cast(GitHubRelease, response.json())
-
-            # Find matching asset
-            asset: GitHubAsset | None = None
-            for asset_item in release_data.get("assets", []):
-                if fnmatch.fnmatch(asset_item["name"], asset_pattern):
-                    asset = asset_item
-                    break
+            release_data = cls._fetch_release_data()
+            asset = cls._find_matching_asset(release_data, asset_pattern)
 
             if not asset:
                 return False, f"No matching asset found for pattern: {asset_pattern}"
 
-            asset_name: str = asset["name"]
-            asset_url: str = asset["browser_download_url"]
-
-            # Extract SHA256 from API response (GitHub stores it in the API metadata)
-            # Note: GitHub doesn't provide checksums in the public API for releases
-            # We'll download but warn about verification
-            console.print(f"[blue]Downloading {asset_name}...[/blue]")
-
-            cls.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            download_path: Path = cls.CACHE_DIR / asset_name
-
-            # Download file (follow redirects)
-            with (
-                httpx.Client(timeout=300.0, follow_redirects=True) as client,
-                client.stream("GET", asset_url) as dl_response,
-            ):
-                _ = dl_response.raise_for_status()
-                with download_path.open("wb") as f:
-                    for chunk in dl_response.iter_bytes(chunk_size=8192):
-                        _ = f.write(chunk)
-
-            console.print(f"[green]Downloaded to {download_path}[/green]")
+            download_path = cls._download_asset(
+                asset["name"], asset["browser_download_url"]
+            )
 
             # Extract and install (Linux only, Windows requires manual setup)
             if platform.system().lower() == "linux":
                 return cls._install_linux_binary(download_path)
-            else:
-                return False, "Downloaded, but automatic installation only supported on Linux"
 
         except httpx.HTTPError as e:
             return False, f"HTTP error downloading Doxygen: {e}"
-        except Exception as e:
-            return False, f"Failed to install Doxygen: {e}"
+
+        return (False, "Downloaded, but automatic installation only supported on Linux")
 
     @classmethod
     def _install_linux_binary(cls, tarball_path: Path) -> tuple[bool, str]:
@@ -193,8 +258,12 @@ class DoxygenInstaller:
 
             console.print(f"[blue]Extracting {tarball_path.name}...[/blue]")
             with tarfile.open(tarball_path, "r:gz") as tar:
-                # S202: Trusted source (GitHub release), ignoring Zip Slip warning
-                tar.extractall(extract_dir)
+                # Use filter='data' on Python 3.12+ for security, fall back to default
+                # on Python 3.11 (trusted source: GitHub official Doxygen release)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(extract_dir, filter="data")
+                else:
+                    tar.extractall(extract_dir)  # noqa: S202
 
             # Find doxygen binary in extracted files
             doxygen_bin = None
@@ -210,8 +279,6 @@ class DoxygenInstaller:
             cls.INSTALL_DIR.mkdir(parents=True, exist_ok=True)
             install_path = cls.INSTALL_DIR / "doxygen"
 
-            import shutil
-
             _ = shutil.copy2(doxygen_bin, install_path)
             install_path.chmod(0o755)
 
@@ -220,7 +287,7 @@ class DoxygenInstaller:
                 os.environ["PATH"] = f"{cls.INSTALL_DIR}:{os.environ.get('PATH', '')}"
 
             console.print(f"[green]Installed Doxygen to {install_path}[/green]")
-        except Exception as e:
+        except (OSError, tarfile.TarError, shutil.Error) as e:
             return False, f"Failed to extract/install: {e}"
         else:
             return True, f"Doxygen installed to {install_path}"
@@ -231,7 +298,11 @@ class SystemValidator:
 
     @staticmethod
     def _check_command(
-        name: str, binary: str, version_arg: str = "--version", strip_prefix: str = "", install_msg: str = "Not found"
+        name: str,
+        binary: str,
+        version_arg: str = "--version",
+        strip_prefix: str = "",
+        install_msg: str = "Not found",
     ) -> ValidationResult:
         """Generic command validation helper.
 
@@ -247,17 +318,34 @@ class SystemValidator:
         """
         path = which(binary)
         if not path:
-            return ValidationResult(check_name=name, passed=False, message=install_msg, required=True)
+            return ValidationResult(
+                check_name=name, passed=False, message=install_msg, required=True
+            )
 
         try:
-            result = subprocess.run([path, version_arg], capture_output=True, text=True, check=True, timeout=5)
+            result = subprocess.run(
+                [path, version_arg],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
             version = result.stdout.strip()
             if strip_prefix and version.startswith(strip_prefix):
                 version = version[len(strip_prefix) :]
-            return ValidationResult(check_name=name, passed=True, message="Installed", value=version, required=True)
+            return ValidationResult(
+                check_name=name,
+                passed=True,
+                message="Installed",
+                value=version,
+                required=True,
+            )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return ValidationResult(
-                check_name=name, passed=False, message="Found but version check failed", required=True
+                check_name=name,
+                passed=False,
+                message="Found but version check failed",
+                required=True,
             )
 
     @staticmethod
@@ -268,7 +356,10 @@ class SystemValidator:
             Validation result.
         """
         return SystemValidator._check_command(
-            name="Git", binary="git", strip_prefix="git version ", install_msg="Not found - install git"
+            name="Git",
+            binary="git",
+            strip_prefix="git version ",
+            install_msg="Not found - install git",
         )
 
     @staticmethod
@@ -296,7 +387,11 @@ class SystemValidator:
 
         if is_installed:
             return ValidationResult(
-                check_name="Doxygen", passed=True, message="Installed", value=version, required=False
+                check_name="Doxygen",
+                passed=True,
+                message="Installed",
+                value=version,
+                required=False,
             )
 
         return ValidationResult(
@@ -312,7 +407,7 @@ class ProjectValidator:
 
     repo_path: Path
 
-    def __init__(self, repo_path: Path):
+    def __init__(self, repo_path: Path) -> None:
         """Initialize validator with target repository path.
 
         Args:
@@ -328,7 +423,10 @@ class ProjectValidator:
         """
         if not self.repo_path.exists():
             return ValidationResult(
-                check_name="Path exists", passed=False, message=f"Path does not exist: {self.repo_path}", required=True
+                check_name="Path exists",
+                passed=False,
+                message=f"Path does not exist: {self.repo_path}",
+                required=True,
             )
 
         if not self.repo_path.is_dir():
@@ -339,7 +437,12 @@ class ProjectValidator:
                 required=True,
             )
 
-        return ValidationResult(check_name="Path exists", passed=True, message="Valid directory", required=True)
+        return ValidationResult(
+            check_name="Path exists",
+            passed=True,
+            message="Valid directory",
+            required=True,
+        )
 
     def check_git_repository(self) -> ValidationResult:
         """Check if path is a git repository.
@@ -356,7 +459,12 @@ class ProjectValidator:
                 required=True,
             )
 
-        return ValidationResult(check_name="Git repository", passed=True, message="Valid git repository", required=True)
+        return ValidationResult(
+            check_name="Git repository",
+            passed=True,
+            message="Valid git repository",
+            required=True,
+        )
 
     def check_pyproject_toml(self) -> ValidationResult:
         """Check if pyproject.toml exists.
@@ -366,17 +474,41 @@ class ProjectValidator:
         """
         pyproject_path = self.repo_path / "pyproject.toml"
         if not pyproject_path.exists():
-            return ValidationResult(check_name="pyproject.toml", passed=False, message="File not found", required=True)
+            return ValidationResult(
+                check_name="pyproject.toml",
+                passed=False,
+                message="File not found",
+                required=True,
+            )
 
         # Try to parse it
         try:
-            with open(pyproject_path, encoding="utf-8") as f:
+            with Path(pyproject_path).open(encoding="utf-8") as f:
                 _ = tomlkit.load(f)
-            return ValidationResult(check_name="pyproject.toml", passed=True, message="Valid TOML file", required=True)
-        except Exception as e:
             return ValidationResult(
-                check_name="pyproject.toml", passed=False, message=f"Invalid TOML: {e}", required=True
+                check_name="pyproject.toml",
+                passed=True,
+                message="Valid TOML file",
+                required=True,
             )
+        except TOMLKitError as e:
+            return ValidationResult(
+                check_name="pyproject.toml",
+                passed=False,
+                message=f"Invalid TOML: {e}",
+                required=True,
+            )
+
+    def _read_pyproject_safe(self) -> PyprojectConfig | None:
+        """Read pyproject.toml safely, returning None on error.
+
+        Returns:
+            Parsed pyproject config or None if not found/invalid
+        """
+        try:
+            return read_pyproject(self.repo_path)
+        except FileNotFoundError:
+            return None
 
     def check_c_code(self) -> ValidationResult:
         """Check if repository contains C/C++ source code.
@@ -384,23 +516,7 @@ class ProjectValidator:
         Returns:
             Validation result
         """
-        # Note: We need to import these here to avoid circular imports
-        # or we need to refactor generator.py to be importable
-        # For now, we'll assume the functions are available or move them to a common place
-        # But wait, detect_c_code is in generator.py which we haven't created yet.
-        # This creates a circular dependency if we're not careful.
-        # Ideally, detection logic should be in a separate module or here.
-        # Let's import from generator if possible, but generator imports models.
-        # So models -> validators -> generator -> models is a cycle.
-        # Solution: Move detection logic to a separate module or keep it in generator
-        # and import inside the method.
-        from mkapidocs.generator import detect_c_code, read_pyproject
-
-        try:
-            pyproject = read_pyproject(self.repo_path)
-        except FileNotFoundError:
-            pyproject = None
-
+        pyproject = self._read_pyproject_safe()
         c_source_dirs = detect_c_code(self.repo_path, pyproject=pyproject)
 
         if c_source_dirs:
@@ -416,7 +532,11 @@ class ProjectValidator:
             )
 
         return ValidationResult(
-            check_name="C/C++ code", passed=True, message="Not found", value="Doxygen not needed", required=False
+            check_name="C/C++ code",
+            passed=True,
+            message="Not found",
+            value="Doxygen not needed",
+            required=False,
         )
 
     def check_typer_dependency(self) -> ValidationResult:
@@ -425,22 +545,31 @@ class ProjectValidator:
         Returns:
             Validation result
         """
-        from mkapidocs.generator import detect_typer_dependency, read_pyproject
-
-        try:
-            pyproject = read_pyproject(self.repo_path)
-            has_typer = detect_typer_dependency(pyproject)
-
-            if has_typer:
-                return ValidationResult(
-                    check_name="Typer dependency", passed=True, message="Found in dependencies", required=False
-                )
-
-            return ValidationResult(check_name="Typer dependency", passed=True, message="Not found", required=False)
-        except Exception as e:
+        pyproject = self._read_pyproject_safe()
+        if pyproject is None:
             return ValidationResult(
-                check_name="Typer dependency", passed=False, message=f"Could not check: {e}", required=False
+                check_name="Typer dependency",
+                passed=False,
+                message="Could not read pyproject.toml",
+                required=False,
             )
+
+        has_typer = detect_typer_dependency(pyproject)
+
+        if has_typer:
+            return ValidationResult(
+                check_name="Typer dependency",
+                passed=True,
+                message="Found in dependencies",
+                required=False,
+            )
+
+        return ValidationResult(
+            check_name="Typer dependency",
+            passed=True,
+            message="Not found",
+            required=False,
+        )
 
     def check_mkdocs_yml(self) -> ValidationResult:
         """Check if mkdocs.yml exists (for build/serve commands).
@@ -451,10 +580,15 @@ class ProjectValidator:
         mkdocs_path = self.repo_path / "mkdocs.yml"
         if not mkdocs_path.exists():
             return ValidationResult(
-                check_name="mkdocs.yml", passed=False, message="File not found - run setup command first", required=True
+                check_name="mkdocs.yml",
+                passed=False,
+                message="File not found - run setup command first",
+                required=True,
             )
 
-        return ValidationResult(check_name="mkdocs.yml", passed=True, message="Found", required=True)
+        return ValidationResult(
+            check_name="mkdocs.yml", passed=True, message="Found", required=True
+        )
 
 
 def _get_table_width(table: Table) -> int:
@@ -471,7 +605,9 @@ def _get_table_width(table: Table) -> int:
     return int(measurement.maximum)
 
 
-def display_validation_results(results: list[ValidationResult], title: str = "Environment Validation") -> None:
+def display_validation_results(
+    results: list[ValidationResult], title: str = "Environment Validation"
+) -> None:
     """Display validation results in a Rich formatted table.
 
     Only displays the table if there are failures. If all checks pass,
@@ -488,7 +624,12 @@ def display_validation_results(results: list[ValidationResult], title: str = "En
     if not failures:
         return
 
-    table = Table(title=f":mag: {title}", box=box.MINIMAL_DOUBLE_HEAD, title_style="bold cyan", show_header=True)
+    table = Table(
+        title=f":mag: {title}",
+        box=box.MINIMAL_DOUBLE_HEAD,
+        title_style="bold cyan",
+        show_header=True,
+    )
 
     table.add_column("Check", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center", no_wrap=True)
@@ -531,8 +672,7 @@ def validate_environment(
 
     # System checks
     sys_validator = SystemValidator()
-    results.append(sys_validator.check_git())
-    results.append(sys_validator.check_uv())
+    results.extend((sys_validator.check_git(), sys_validator.check_uv()))
     doxygen_result = sys_validator.check_doxygen()
     results.append(doxygen_result)
 
@@ -543,11 +683,12 @@ def validate_environment(
 
     # Only continue with further checks if path exists
     if path_result.passed:
-        results.append(proj_validator.check_git_repository())
-        results.append(proj_validator.check_pyproject_toml())
+        results.extend((
+            proj_validator.check_git_repository(),
+            proj_validator.check_pyproject_toml(),
+        ))
         c_code_result = proj_validator.check_c_code()
-        results.append(c_code_result)
-        results.append(proj_validator.check_typer_dependency())
+        results.extend((c_code_result, proj_validator.check_typer_dependency()))
 
         if check_mkdocs:
             results.append(proj_validator.check_mkdocs_yml())
@@ -560,7 +701,9 @@ def validate_environment(
             and "required" in c_code_result.value.lower()
             and not doxygen_result.passed
         ):
-            console.print("\n[yellow]C/C++ code detected but Doxygen not installed.[/yellow]")
+            console.print(
+                "\n[yellow]C/C++ code detected but Doxygen not installed.[/yellow]"
+            )
             console.print("[blue]Attempting automatic Doxygen installation...[/blue]\n")
 
             success, message = DoxygenInstaller.download_and_install()
@@ -576,7 +719,9 @@ def validate_environment(
                 console.print(f"\n[green]:white_check_mark: {message}[/green]\n")
             else:
                 console.print(f"\n[yellow]:warning: {message}[/yellow]\n")
-                console.print("[yellow]Documentation will be generated without C/C++ API reference.[/yellow]\n")
+                console.print(
+                    "[yellow]Documentation will be generated without C/C++ API reference.[/yellow]\n"
+                )
 
     # Check if all required checks passed
     all_required_passed = all(r.passed or not r.required for r in results)

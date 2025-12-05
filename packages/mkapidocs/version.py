@@ -5,7 +5,7 @@ Based on <https://github.com/maresb/hatch-vcs-footgun-example>.
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 
 def _get_hatch_version() -> str | None:
@@ -19,9 +19,10 @@ def _get_hatch_version() -> str | None:
         The version string from hatchling, or None if hatchling is not installed.
     """
     try:
-        from hatchling.metadata.core import ProjectMetadata
-        from hatchling.plugin.manager import PluginManager
-        from hatchling.utils.fs import locate_file
+        # Hatchling is a build dependency, not runtime - must import conditionally
+        from hatchling.metadata.core import ProjectMetadata  # noqa: PLC0415
+        from hatchling.plugin.manager import PluginManager  # noqa: PLC0415
+        from hatchling.utils.fs import locate_file  # noqa: PLC0415
     except ImportError:
         # Hatchling is not installed, so probably we are not in
         # a development environment.
@@ -30,7 +31,7 @@ def _get_hatch_version() -> str | None:
     pyproject_toml = locate_file(__file__, "pyproject.toml")
     if pyproject_toml is None:
         raise RuntimeError("pyproject.toml not found although hatchling is installed")
-    root = os.path.dirname(pyproject_toml)
+    root = str(Path(pyproject_toml).parent)
     metadata = ProjectMetadata(root=root, plugin_manager=PluginManager())
     # Version can be either statically set in pyproject.toml or computed dynamically:
     version_value = metadata.core.version or metadata.hatch.version.cached
@@ -48,10 +49,10 @@ def _get_importlib_metadata_version() -> str:
     Returns:
         The version string from importlib.metadata.
     """
-    from importlib.metadata import version
+    # Deferred import - only called if hatchling unavailable
+    from importlib.metadata import version  # noqa: PLC0415
 
-    __version__ = version(__package__ or __name__)
-    return __version__
+    return version(__package__ or __name__)
 
 
 __version__ = _get_hatch_version() or _get_importlib_metadata_version()

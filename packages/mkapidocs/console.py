@@ -6,10 +6,14 @@ output formatting across all modules.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rich.console import Console, RenderableType
 from rich.measure import Measurement
-from rich.panel import Panel
-from rich.table import Table
+
+if TYPE_CHECKING:
+    from rich.panel import Panel
+    from rich.table import Table
 
 # Single shared console instance
 console = Console()

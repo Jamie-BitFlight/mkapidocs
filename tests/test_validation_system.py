@@ -11,10 +11,21 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from mkapidocs.models import TomlTable
-from mkapidocs.validators import DoxygenInstaller, ProjectValidator, SystemValidator, ValidationResult
-from pytest_mock import MockerFixture
+import httpx
+
+from mkapidocs.validators import (
+    DoxygenInstaller,
+    ProjectValidator,
+    SystemValidator,
+    ValidationResult,
+)
+
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
+
+    from mkapidocs.models import TomlTable
 
 
 class TestDoxygenInstaller:
@@ -78,7 +89,9 @@ class TestDoxygenInstaller:
         """
         # Arrange
         _ = mocker.patch("mkapidocs.validators.which", return_value="/usr/bin/doxygen")
-        _ = mocker.patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "doxygen"))
+        _ = mocker.patch(
+            "subprocess.run", side_effect=subprocess.CalledProcessError(1, "doxygen")
+        )
 
         # Act
         is_installed, version = DoxygenInstaller.is_installed()
@@ -127,7 +140,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name == "doxygen-*.linux.bin.tar.gz"
 
-    def test_get_platform_asset_name_windows_x86_64(self, mocker: MockerFixture) -> None:
+    def test_get_platform_asset_name_windows_x86_64(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test platform detection returns Windows installer for Windows x86_64.
 
         Tests: DoxygenInstaller.get_platform_asset_name()
@@ -147,7 +162,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name == "doxygen-*-setup.exe"
 
-    def test_get_platform_asset_name_macos_not_supported(self, mocker: MockerFixture) -> None:
+    def test_get_platform_asset_name_macos_not_supported(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test platform detection returns None for macOS.
 
         Tests: DoxygenInstaller.get_platform_asset_name()
@@ -166,7 +183,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name is None
 
-    def test_get_platform_asset_name_linux_arm_not_supported(self, mocker: MockerFixture) -> None:
+    def test_get_platform_asset_name_linux_arm_not_supported(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test platform detection returns None for unsupported Linux architecture.
 
         Tests: DoxygenInstaller.get_platform_asset_name()
@@ -178,7 +197,9 @@ class TestDoxygenInstaller:
         """
         # Arrange
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="Linux")
-        _ = mocker.patch("mkapidocs.validators.platform.machine", return_value="aarch64")
+        _ = mocker.patch(
+            "mkapidocs.validators.platform.machine", return_value="aarch64"
+        )
 
         # Act
         asset_name = DoxygenInstaller.get_platform_asset_name()
@@ -186,7 +207,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name is None
 
-    def test_get_platform_asset_name_windows_arm_not_supported(self, mocker: MockerFixture) -> None:
+    def test_get_platform_asset_name_windows_arm_not_supported(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test platform detection returns None for Windows ARM.
 
         Tests: DoxygenInstaller.get_platform_asset_name()
@@ -198,7 +221,9 @@ class TestDoxygenInstaller:
         """
         # Arrange
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="Windows")
-        _ = mocker.patch("mkapidocs.validators.platform.machine", return_value="aarch64")
+        _ = mocker.patch(
+            "mkapidocs.validators.platform.machine", return_value="aarch64"
+        )
 
         # Act
         asset_name = DoxygenInstaller.get_platform_asset_name()
@@ -206,7 +231,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name is None
 
-    def test_get_platform_asset_name_unknown_os_not_supported(self, mocker: MockerFixture) -> None:
+    def test_get_platform_asset_name_unknown_os_not_supported(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test platform detection returns None for unknown operating systems.
 
         Tests: DoxygenInstaller.get_platform_asset_name()
@@ -226,7 +253,9 @@ class TestDoxygenInstaller:
         # Assert
         assert asset_name is None
 
-    def test_download_and_install_unsupported_platform_macos(self, mocker: MockerFixture) -> None:
+    def test_download_and_install_unsupported_platform_macos(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test download_and_install returns error for macOS.
 
         Tests: DoxygenInstaller.download_and_install()
@@ -237,7 +266,10 @@ class TestDoxygenInstaller:
             mocker: pytest-mock fixture for mocking
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.get_platform_asset_name", return_value=None)
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name",
+            return_value=None,
+        )
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="Darwin")
 
         # Act
@@ -248,7 +280,9 @@ class TestDoxygenInstaller:
         assert "macOS detected" in message
         assert "Homebrew" in message
 
-    def test_download_and_install_unsupported_platform_generic(self, mocker: MockerFixture) -> None:
+    def test_download_and_install_unsupported_platform_generic(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test download_and_install returns error for unsupported platforms.
 
         Tests: DoxygenInstaller.download_and_install()
@@ -259,7 +293,10 @@ class TestDoxygenInstaller:
             mocker: pytest-mock fixture for mocking
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.get_platform_asset_name", return_value=None)
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name",
+            return_value=None,
+        )
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="FreeBSD")
         _ = mocker.patch("mkapidocs.validators.platform.machine", return_value="x86_64")
 
@@ -282,13 +319,16 @@ class TestDoxygenInstaller:
         """
         # Arrange
         _ = mocker.patch(
-            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name", return_value="doxygen-*.linux.bin.tar.gz"
+            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name",
+            return_value="doxygen-*.linux.bin.tar.gz",
         )
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="Linux")
 
-        # Mock httpx.Client context manager
+        # Mock httpx.Client context manager - raise HTTPError specifically
         mock_client = mocker.MagicMock()
-        mock_client.__enter__.return_value.get.side_effect = Exception("Connection timeout")
+        mock_client.__enter__.return_value.get.side_effect = httpx.HTTPError(
+            "Connection timeout"
+        )
         _ = mocker.patch("mkapidocs.validators.httpx.Client", return_value=mock_client)
 
         # Mock console.print to avoid output
@@ -299,9 +339,11 @@ class TestDoxygenInstaller:
 
         # Assert
         assert success is False
-        assert "Failed to install Doxygen" in message
+        assert "HTTP error downloading Doxygen" in message
 
-    def test_download_and_install_no_matching_asset(self, mocker: MockerFixture) -> None:
+    def test_download_and_install_no_matching_asset(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test download_and_install handles missing asset in release.
 
         Tests: DoxygenInstaller.download_and_install()
@@ -313,13 +355,16 @@ class TestDoxygenInstaller:
         """
         # Arrange
         _ = mocker.patch(
-            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name", return_value="doxygen-*.linux.bin.tar.gz"
+            "mkapidocs.validators.DoxygenInstaller.get_platform_asset_name",
+            return_value="doxygen-*.linux.bin.tar.gz",
         )
         _ = mocker.patch("mkapidocs.validators.platform.system", return_value="Linux")
 
         # Mock httpx.Client for API call
         mock_response = mocker.MagicMock()
-        mock_response.json.return_value = {"assets": [{"name": "doxygen-1.9.8-windows-setup.exe"}]}
+        mock_response.json.return_value = {
+            "assets": [{"name": "doxygen-1.9.8-windows-setup.exe"}]
+        }
 
         mock_client = mocker.MagicMock()
         mock_client.__enter__.return_value.get.return_value = mock_response
@@ -335,7 +380,9 @@ class TestDoxygenInstaller:
         assert success is False
         assert "No matching asset found" in message
 
-    def test_install_linux_binary_success(self, mocker: MockerFixture, tmp_path: Path) -> None:
+    def test_install_linux_binary_success(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
         """Test _install_linux_binary successfully extracts and installs binary.
 
         Tests: DoxygenInstaller._install_linux_binary()
@@ -363,7 +410,9 @@ class TestDoxygenInstaller:
         mock_tar.__enter__.return_value.extractall = mocker.MagicMock()
 
         # Mock os.walk to find doxygen binary
-        _ = mocker.patch("os.walk", return_value=[(str(doxygen_bin.parent), [], ["doxygen"])])
+        _ = mocker.patch(
+            "os.walk", return_value=[(str(doxygen_bin.parent), [], ["doxygen"])]
+        )
 
         # Mock shutil.copy2
         _ = mocker.patch("shutil.copy2")
@@ -371,8 +420,12 @@ class TestDoxygenInstaller:
         # Mock Path methods
         _ = mocker.patch.object(Path, "chmod")
         # Patch class attributes via module
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.CACHE_DIR", tmp_path / "cache")
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.INSTALL_DIR", tmp_path / "install")
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.CACHE_DIR", tmp_path / "cache"
+        )
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.INSTALL_DIR", tmp_path / "install"
+        )
 
         # Mock console.print
         _ = mocker.patch("mkapidocs.validators.console.print")
@@ -384,7 +437,9 @@ class TestDoxygenInstaller:
         assert success is True
         assert "Doxygen installed to" in message
 
-    def test_install_linux_binary_no_binary_found(self, mocker: MockerFixture, tmp_path: Path) -> None:
+    def test_install_linux_binary_no_binary_found(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
         """Test _install_linux_binary handles missing binary in archive.
 
         Tests: DoxygenInstaller._install_linux_binary() error handling
@@ -406,7 +461,9 @@ class TestDoxygenInstaller:
         # Mock os.walk to find no doxygen binary
         _ = mocker.patch("os.walk", return_value=[("/some/path", [], ["README.md"])])
 
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.CACHE_DIR", tmp_path / "cache")
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.CACHE_DIR", tmp_path / "cache"
+        )
         _ = mocker.patch("mkapidocs.validators.console.print")
 
         # Act
@@ -482,7 +539,9 @@ class TestSystemValidator:
         """
         # Arrange
         _ = mocker.patch("mkapidocs.validators.which", return_value="/usr/bin/git")
-        _ = mocker.patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git"))
+        _ = mocker.patch(
+            "subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")
+        )
 
         # Act
         result = SystemValidator.check_git()
@@ -502,7 +561,9 @@ class TestSystemValidator:
             mocker: pytest-mock fixture for mocking
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.validators.which", return_value="/usr/local/bin/uvx")
+        _ = mocker.patch(
+            "mkapidocs.validators.which", return_value="/usr/local/bin/uvx"
+        )
         mock_result = mocker.MagicMock()
         mock_result.stdout = "uvx 0.1.0"
         _ = mocker.patch("subprocess.run", return_value=mock_result)
@@ -549,7 +610,10 @@ class TestSystemValidator:
             mocker: pytest-mock fixture for mocking
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.is_installed", return_value=(True, "1.9.8"))
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.is_installed",
+            return_value=(True, "1.9.8"),
+        )
 
         # Act
         result = SystemValidator.check_doxygen()
@@ -571,7 +635,10 @@ class TestSystemValidator:
             mocker: pytest-mock fixture for mocking
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.validators.DoxygenInstaller.is_installed", return_value=(False, None))
+        _ = mocker.patch(
+            "mkapidocs.validators.DoxygenInstaller.is_installed",
+            return_value=(False, None),
+        )
 
         # Act
         result = SystemValidator.check_doxygen()
@@ -694,7 +761,9 @@ class TestProjectValidator:
         assert result.passed is False
         assert "Not a git repository" in result.message
 
-    def test_check_pyproject_toml_valid(self, mock_repo_path: Path, mock_pyproject_toml: Path) -> None:
+    def test_check_pyproject_toml_valid(
+        self, mock_repo_path: Path, mock_pyproject_toml: Path
+    ) -> None:
         """Test check_pyproject_toml passes for valid TOML file.
 
         Tests: ProjectValidator.check_pyproject_toml()
@@ -747,7 +816,9 @@ class TestProjectValidator:
         """
         # Arrange
         pyproject_path = mock_repo_path / "pyproject.toml"
-        _ = pyproject_path.write_text("[project\nname = invalid")  # Missing closing bracket
+        _ = pyproject_path.write_text(
+            "[project\nname = invalid"
+        )  # Missing closing bracket
         validator = ProjectValidator(mock_repo_path)
 
         # Act
@@ -757,7 +828,9 @@ class TestProjectValidator:
         assert result.passed is False
         assert "Invalid TOML" in result.message
 
-    def test_check_c_code_found(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+    def test_check_c_code_found(
+        self, mocker: MockerFixture, mock_repo_path: Path
+    ) -> None:
         """Test check_c_code detects C/C++ source files.
 
         Tests: ProjectValidator.check_c_code()
@@ -769,7 +842,10 @@ class TestProjectValidator:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.generator.detect_c_code", return_value=[mock_repo_path / "source"])
+        _ = mocker.patch(
+            "mkapidocs.validators.detect_c_code",
+            return_value=[mock_repo_path / "source"],
+        )
         validator = ProjectValidator(mock_repo_path)
 
         # Act
@@ -781,7 +857,9 @@ class TestProjectValidator:
         assert "source" in result.message
         assert result.value == "Doxygen required"
 
-    def test_check_c_code_not_found(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+    def test_check_c_code_not_found(
+        self, mocker: MockerFixture, mock_repo_path: Path
+    ) -> None:
         """Test check_c_code returns passing result when no C code.
 
         Tests: ProjectValidator.check_c_code()
@@ -793,7 +871,7 @@ class TestProjectValidator:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        _ = mocker.patch("mkapidocs.generator.detect_c_code", return_value=[])
+        _ = mocker.patch("mkapidocs.validators.detect_c_code", return_value=[])
         validator = ProjectValidator(mock_repo_path)
 
         # Act
@@ -804,7 +882,9 @@ class TestProjectValidator:
         assert "Not found" in result.message
         assert result.value == "Doxygen not needed"
 
-    def test_check_typer_dependency_found(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+    def test_check_typer_dependency_found(
+        self, mocker: MockerFixture, mock_repo_path: Path
+    ) -> None:
         """Test check_typer_dependency detects Typer in dependencies.
 
         Tests: ProjectValidator.check_typer_dependency()
@@ -817,8 +897,12 @@ class TestProjectValidator:
         """
         # Arrange
         mock_pyproject = {"project": {"dependencies": ["typer>=0.9.0"]}}
-        _ = mocker.patch("mkapidocs.generator.read_pyproject", return_value=mock_pyproject)
-        _ = mocker.patch("mkapidocs.generator.detect_typer_dependency", return_value=True)
+        _ = mocker.patch(
+            "mkapidocs.validators.read_pyproject", return_value=mock_pyproject
+        )
+        _ = mocker.patch(
+            "mkapidocs.validators.detect_typer_dependency", return_value=True
+        )
         validator = ProjectValidator(mock_repo_path)
 
         # Act
@@ -828,7 +912,9 @@ class TestProjectValidator:
         assert result.passed is True
         assert "Found in dependencies" in result.message
 
-    def test_check_typer_dependency_not_found(self, mocker: MockerFixture, mock_repo_path: Path) -> None:
+    def test_check_typer_dependency_not_found(
+        self, mocker: MockerFixture, mock_repo_path: Path
+    ) -> None:
         """Test check_typer_dependency returns passing result without Typer.
 
         Tests: ProjectValidator.check_typer_dependency()
@@ -841,8 +927,12 @@ class TestProjectValidator:
         """
         # Arrange
         mock_pyproject: TomlTable = {"project": {"dependencies": []}}
-        _ = mocker.patch("mkapidocs.generator.read_pyproject", return_value=mock_pyproject)
-        _ = mocker.patch("mkapidocs.generator.detect_typer_dependency", return_value=False)
+        _ = mocker.patch(
+            "mkapidocs.validators.read_pyproject", return_value=mock_pyproject
+        )
+        _ = mocker.patch(
+            "mkapidocs.validators.detect_typer_dependency", return_value=False
+        )
         validator = ProjectValidator(mock_repo_path)
 
         # Act
@@ -909,7 +999,9 @@ class TestValidationResult:
 
         """
         # Act
-        result = ValidationResult(check_name="Test Check", passed=True, message="Success")
+        result = ValidationResult(
+            check_name="Test Check", passed=True, message="Success"
+        )
 
         # Assert
         assert result.check_name == "Test Check"
@@ -928,7 +1020,11 @@ class TestValidationResult:
         """
         # Act
         result = ValidationResult(
-            check_name="Version Check", passed=True, message="Found", value="1.2.3", required=False
+            check_name="Version Check",
+            passed=True,
+            message="Found",
+            value="1.2.3",
+            required=False,
         )
 
         # Assert

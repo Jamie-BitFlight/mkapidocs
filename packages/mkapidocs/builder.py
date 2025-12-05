@@ -7,18 +7,21 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from shutil import which
-from types import FrameType
+from typing import TYPE_CHECKING
 
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from types import FrameType
 
 # Initialize Rich console
 console = Console()
 MKDOCS_FILE = "mkdocs.yml"
-CMD_LIST_TYPE = list[str | Path] | list[str]
+CMD_LIST_TYPE = list[str | Path]
 
 # Type alias for signal handlers
 SignalHandler = signal.Handlers | None
@@ -38,7 +41,13 @@ def is_mkapidocs_in_target_env(repo_path: Path) -> bool:
 
     try:
         # Check if installed using uv pip freeze (more robust/efficient than show)
-        result = subprocess.run([uv_cmd, "pip", "freeze"], cwd=repo_path, check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            [uv_cmd, "pip", "freeze"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
     except subprocess.CalledProcessError:
         return False
     else:
@@ -143,12 +152,19 @@ def _kill_process_on_port(port: int) -> bool:
         if not (lsof_cmd := which("lsof")):
             return False
 
-        result = subprocess.run([lsof_cmd, "-t", "-i", f":{port}"], capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            [lsof_cmd, "-t", "-i", f":{port}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if result.returncode == 0 and result.stdout.strip():
             pids = result.stdout.strip().split("\n")
             for pid in pids:
                 if pid.isdigit():
-                    console.print(f"[yellow]Stopping existing process on port {port} (PID: {pid})...[/yellow]")
+                    console.print(
+                        f"[yellow]Stopping existing process on port {port} (PID: {pid})...[/yellow]"
+                    )
                     os.kill(int(pid), signal.SIGINT)
             # Give processes time to shut down gracefully
             time.sleep(1)
@@ -158,7 +174,9 @@ def _kill_process_on_port(port: int) -> bool:
     return False
 
 
-def _run_subprocess_with_interrupt(cmd: list[str | Path], cwd: Path, env: dict[str, str]) -> int:
+def _run_subprocess_with_interrupt(
+    cmd: list[str | Path], cwd: Path, env: dict[str, str]
+) -> int:
     """Run a subprocess with signal handling (SIGINT/SIGTERM).
 
     Args:
@@ -201,7 +219,9 @@ def _get_mkdocs_plugins() -> list[str]:
     ]
 
 
-def build_docs(target_path: Path, strict: bool = False, output_dir: Path | None = None) -> int:
+def build_docs(
+    target_path: Path, strict: bool = False, output_dir: Path | None = None
+) -> int:
     """Build documentation using target project's environment or uvx fallback.
 
     If mkapidocs is installed in the target project's environment, uses that
@@ -249,7 +269,9 @@ def build_docs(target_path: Path, strict: bool = False, output_dir: Path | None 
     return _build_with_target_env(target_path, env, strict, output_dir)
 
 
-def _build_with_target_env(target_path: Path, env: dict[str, str], strict: bool, output_dir: Path | None) -> int:
+def _build_with_target_env(
+    target_path: Path, env: dict[str, str], strict: bool, output_dir: Path | None
+) -> int:
     """Build docs using target project's environment via uv run.
 
     Args:
@@ -272,7 +294,15 @@ def _build_with_target_env(target_path: Path, env: dict[str, str], strict: bool,
 
     env["MKAPIDOCS_INTERNAL_CALL"] = "1"
     # Use --directory to run in the target project's context
-    cmd: CMD_LIST_TYPE = [uv_cmd, "--directory", str(target_path), "run", "mkapidocs", "build", str(target_path)]
+    cmd: CMD_LIST_TYPE = [
+        uv_cmd,
+        "--directory",
+        str(target_path),
+        "run",
+        "mkapidocs",
+        "build",
+        str(target_path),
+    ]
     if strict:
         cmd.append("--strict")
     if output_dir:
@@ -295,7 +325,9 @@ def _build_with_mkdocs_direct(
     Returns:
         Exit code from build, or None if mkdocs not found.
     """
-    console.print("[blue]:zap: Running mkdocs directly (already in target environment)[/blue]")
+    console.print(
+        "[blue]:zap: Running mkdocs directly (already in target environment)[/blue]"
+    )
     if mkdocs_cmd := which("mkdocs"):
         cmd: CMD_LIST_TYPE = [mkdocs_cmd, "build"]
         if strict:
@@ -352,7 +384,9 @@ def serve_docs(target_path: Path, host: str = "127.0.0.1", port: int = 8000) -> 
     return _serve_with_target_env(target_path, env, host, port)
 
 
-def _serve_with_target_env(target_path: Path, env: dict[str, str], host: str, port: int) -> int:
+def _serve_with_target_env(
+    target_path: Path, env: dict[str, str], host: str, port: int
+) -> int:
     """Serve docs using target project's environment via uv run.
 
     Args:
@@ -396,7 +430,9 @@ def _serve_with_target_env(target_path: Path, env: dict[str, str], host: str, po
     return _run_subprocess_with_interrupt(cmd, target_path, env)
 
 
-def _serve_with_mkdocs_direct(target_path: Path, env: dict[str, str], host: str, port: int) -> int | None:
+def _serve_with_mkdocs_direct(
+    target_path: Path, env: dict[str, str], host: str, port: int
+) -> int | None:
     """Serve docs using mkdocs directly.
 
     Args:
@@ -408,7 +444,9 @@ def _serve_with_mkdocs_direct(target_path: Path, env: dict[str, str], host: str,
     Returns:
         Exit code from serve, or None if mkdocs not found.
     """
-    console.print("[blue]:zap: Running mkdocs directly (already in target environment)[/blue]")
+    console.print(
+        "[blue]:zap: Running mkdocs directly (already in target environment)[/blue]"
+    )
     if mkdocs_cmd := which("mkdocs"):
         # Check for and kill existing process on port
         if _is_port_in_use(host, port):

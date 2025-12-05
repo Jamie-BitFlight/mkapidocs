@@ -9,14 +9,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
+from tomlkit.exceptions import TOMLKitError
 
 from mkapidocs.builder import build_docs, serve_docs
-from mkapidocs.generator import console as generator_console, display_message, setup_documentation
+from mkapidocs.generator import (
+    console as generator_console,
+    display_message,
+    setup_documentation,
+)
 from mkapidocs.models import CIProvider, MessageType
-from mkapidocs.validators import console as validators_console, display_validation_results, validate_environment
-from mkapidocs.yaml_utils import console as yaml_console
+from mkapidocs.validators import (
+    console as validators_console,
+    display_validation_results,
+    validate_environment,
+)
+from mkapidocs.yaml_utils import YAMLError, console as yaml_console
 
 # Initialize Rich console
 console = Console()
@@ -157,7 +167,7 @@ def _generate_success_message(repo_path: Path, provider: CIProvider) -> str:
     """
     try:
         display_path = repo_path.relative_to(Path.cwd())
-        path_str = "." if display_path == Path(".") else str(display_path)
+        path_str = "." if display_path == Path() else str(display_path)
     except ValueError:
         path_str = str(repo_path)
 
@@ -175,7 +185,11 @@ def _generate_success_message(repo_path: Path, provider: CIProvider) -> str:
 @app.command()
 def setup(
     repo_path: Annotated[
-        Path | None, typer.Argument(help="Path to Python repository to set up documentation for", resolve_path=True)
+        Path | None,
+        typer.Argument(
+            help="Path to Python repository to set up documentation for",
+            resolve_path=True,
+        ),
     ] = None,
     provider: Annotated[
         str | None,
@@ -211,7 +225,13 @@ def setup(
         ),
     ] = None,
     quiet: Annotated[
-        bool, typer.Option("--quiet", "-q", help="Suppress output (only show errors)", rich_help_panel="Configuration")
+        bool,
+        typer.Option(
+            "--quiet",
+            "-q",
+            help="Suppress output (only show errors)",
+            rich_help_panel="Configuration",
+        ),
     ] = False,
 ) -> None:
     """Set up MkDocs documentation for a Python repository.
@@ -228,11 +248,13 @@ def setup(
 
     # Resolve repo_path
     if repo_path is None:
-        repo_path = _find_git_root() or Path(".")
+        repo_path = _find_git_root() or Path()
 
     # Validate environment before setup
     console.print()
-    all_passed, results = validate_environment(repo_path, check_mkdocs=False, auto_install_doxygen=True)
+    all_passed, results = validate_environment(
+        repo_path, check_mkdocs=False, auto_install_doxygen=True
+    )
     display_validation_results(results, title="Pre-Setup Validation")
     console.print()
 
@@ -252,7 +274,9 @@ def setup(
     if github_url_base and not site_url:
         effective_site_url = github_url_base
         display_message(
-            "--github-url-base is deprecated. Use --site-url instead.", MessageType.WARNING, title="Deprecated Option"
+            "--github-url-base is deprecated. Use --site-url instead.",
+            MessageType.WARNING,
+            title="Deprecated Option",
         )
 
     try:
@@ -262,7 +286,9 @@ def setup(
             title="Starting Setup",
         )
 
-        result = setup_documentation(repo_path, ci_provider, effective_site_url, c_source_dirs)
+        result = setup_documentation(
+            repo_path, ci_provider, effective_site_url, c_source_dirs
+        )
 
         # Display completion message only on first run (when mkdocs.yml was created)
         if result.is_first_run:
@@ -277,21 +303,40 @@ def setup(
         handle_error(e, f"Repository setup failed: {e}")
     except ValueError as e:
         handle_error(e, str(e))
-    except Exception as e:
-        handle_error(e, f"An unexpected error occurred during setup: {e}")
+    except TOMLKitError as e:
+        handle_error(e, f"Failed to parse pyproject.toml: {e}")
+    except YAMLError as e:
+        handle_error(e, f"Failed to parse YAML configuration: {e}")
+    except httpx.RequestError as e:
+        handle_error(e, f"Network request failed (GitLab API): {e}")
+    except OSError as e:
+        handle_error(e, f"File system error: {e}")
 
 
 @app.command()
 def build(
     repo_path: Annotated[
-        Path | None, typer.Argument(help="Path to Python repository to build documentation for", resolve_path=True)
+        Path | None,
+        typer.Argument(
+            help="Path to Python repository to build documentation for",
+            resolve_path=True,
+        ),
     ] = None,
     strict: Annotated[
-        bool, typer.Option("--strict", help="Enable strict mode (warnings as errors)", rich_help_panel="Build Options")
+        bool,
+        typer.Option(
+            "--strict",
+            help="Enable strict mode (warnings as errors)",
+            rich_help_panel="Build Options",
+        ),
     ] = False,
     output_dir: Annotated[
         Path | None,
-        typer.Option("--output-dir", help="Custom output directory (default: site/)", rich_help_panel="Build Options"),
+        typer.Option(
+            "--output-dir",
+            help="Custom output directory (default: site/)",
+            rich_help_panel="Build Options",
+        ),
     ] = None,
 ) -> None:
     """Build documentation using uvx mkdocs with all required plugins.
@@ -307,11 +352,13 @@ def build(
     """
     # Resolve repo_path
     if repo_path is None:
-        repo_path = _find_git_root() or Path(".")
+        repo_path = _find_git_root() or Path()
 
     # Validate environment before build
     console.print()
-    all_passed, results = validate_environment(repo_path, check_mkdocs=True, auto_install_doxygen=True)
+    all_passed, results = validate_environment(
+        repo_path, check_mkdocs=True, auto_install_doxygen=True
+    )
     display_validation_results(results, title="Pre-Build Validation")
     console.print()
 
@@ -334,11 +381,10 @@ def build(
 
     except FileNotFoundError as e:
         handle_error(e, str(e))
-        # This is unreachable because handle_error raises, but needed for type checking flow if handle_error didn't
-        return
-    except Exception as e:
-        handle_error(e, f"Build failed: {e}")
-        return
+    except RuntimeError as e:
+        handle_error(e, f"Build environment error: {e}")
+    except OSError as e:
+        handle_error(e, f"File system error: {e}")
 
     if exit_code == 0:
         output_path = output_dir or (repo_path / "site")
@@ -349,7 +395,9 @@ def build(
         )
     else:
         display_message(
-            f"Documentation build failed with exit code {exit_code}", MessageType.ERROR, title="Build Failed"
+            f"Documentation build failed with exit code {exit_code}",
+            MessageType.ERROR,
+            title="Build Failed",
         )
         raise typer.Exit(exit_code)
 
@@ -357,13 +405,27 @@ def build(
 @app.command()
 def serve(
     repo_path: Annotated[
-        Path | None, typer.Argument(help="Path to Python repository to serve documentation for", resolve_path=True)
+        Path | None,
+        typer.Argument(
+            help="Path to Python repository to serve documentation for",
+            resolve_path=True,
+        ),
     ] = None,
     host: Annotated[
-        str, typer.Option("--host", help="Server host address", rich_help_panel="Server Options")
+        str,
+        typer.Option(
+            "--host", help="Server host address", rich_help_panel="Server Options"
+        ),
     ] = "127.0.0.1",
     port: Annotated[
-        int, typer.Option("--port", help="Server port", min=1, max=65535, rich_help_panel="Server Options")
+        int,
+        typer.Option(
+            "--port",
+            help="Server port",
+            min=1,
+            max=65535,
+            rich_help_panel="Server Options",
+        ),
     ] = 8000,
 ) -> None:
     """Serve documentation with live preview using uvx mkdocs.
@@ -379,11 +441,13 @@ def serve(
     """
     # Resolve repo_path
     if repo_path is None:
-        repo_path = _find_git_root() or Path(".")
+        repo_path = _find_git_root() or Path()
 
     # Validate environment before serving
     console.print()
-    all_passed, results = validate_environment(repo_path, check_mkdocs=True, auto_install_doxygen=True)
+    all_passed, results = validate_environment(
+        repo_path, check_mkdocs=True, auto_install_doxygen=True
+    )
     display_validation_results(results, title="Pre-Serve Validation")
     console.print()
 
@@ -408,21 +472,28 @@ def serve(
 
     except FileNotFoundError as e:
         handle_error(e, str(e))
-        return
-    except Exception as e:
-        handle_error(e, f"Server failed: {e}")
-        return
+    except RuntimeError as e:
+        handle_error(e, f"Server environment error: {e}")
+    except OSError as e:
+        handle_error(e, f"File system error: {e}")
 
     if exit_code == 0:
         display_message("Server stopped", MessageType.INFO, title="Server Stopped")
     else:
-        display_message(f"Server failed with exit code {exit_code}", MessageType.ERROR, title="Server Failed")
+        display_message(
+            f"Server failed with exit code {exit_code}",
+            MessageType.ERROR,
+            title="Server Failed",
+        )
         raise typer.Exit(exit_code)
 
 
 @app.callback()
 def main(
-    ctx: typer.Context, verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose output")] = False
+    ctx: typer.Context,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable verbose output")
+    ] = False,
 ) -> None:
     """Mkapidocs - Automated documentation setup tool."""
     if ctx.invoked_subcommand is None:

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mkapidocs.generator import ensure_mkapidocs_installed
-from pytest_mock import MockerFixture
+
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
 
 
 class TestEnsureMkapidocsInstalled:
     """Test suite for ensure_mkapidocs_installed function."""
 
-    def test_uv_not_installed(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_uv_not_installed(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test when uv is not installed.
 
         Tests: ensure_mkapidocs_installed returns early if uv not found
@@ -30,7 +35,9 @@ class TestEnsureMkapidocsInstalled:
         args = mock_console.print.call_args[0][0]
         assert "uv not found" in args
 
-    def test_installs_from_registry_when_not_in_source(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_installs_from_registry_when_not_in_source(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test installing mkapidocs from registry when not running from source.
 
         Tests: ensure_mkapidocs_installed uses 'uv add --dev' when not in source repo
@@ -39,7 +46,9 @@ class TestEnsureMkapidocsInstalled:
         # Arrange
         mocker.patch("mkapidocs.generator.which", return_value="/usr/local/bin/uv")
         mocker.patch("mkapidocs.generator._get_mkapidocs_repo_root", return_value=None)
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch(
+            "mkapidocs.generator.is_mkapidocs_in_target_env", return_value=False
+        )
         mock_subprocess = mocker.patch("mkapidocs.generator._run_subprocess")
 
         # Act
@@ -54,7 +63,9 @@ class TestEnsureMkapidocsInstalled:
         assert "--dev" in cmd
         assert "mkapidocs" in cmd
 
-    def test_installs_editable_when_in_source(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_installs_editable_when_in_source(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test installing mkapidocs in editable mode when running from source.
 
         Tests: ensure_mkapidocs_installed uses 'uv pip install -e' when in source repo
@@ -63,8 +74,12 @@ class TestEnsureMkapidocsInstalled:
         # Arrange
         source_path = Path("/home/user/repos/mkapidocs")
         mocker.patch("mkapidocs.generator.which", return_value="/usr/local/bin/uv")
-        mocker.patch("mkapidocs.generator._get_mkapidocs_repo_root", return_value=source_path)
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch(
+            "mkapidocs.generator._get_mkapidocs_repo_root", return_value=source_path
+        )
+        mocker.patch(
+            "mkapidocs.generator.is_mkapidocs_in_target_env", return_value=False
+        )
         mock_subprocess = mocker.patch("mkapidocs.generator._run_subprocess")
 
         # Act
@@ -84,7 +99,9 @@ class TestEnsureMkapidocsInstalled:
         assert "--link-mode=symlink" in install_cmd
         assert str(source_path) in install_cmd
 
-    def test_install_fails_gracefully(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_install_fails_gracefully(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test handling of installation failure.
 
         Tests: ensure_mkapidocs_installed handles install failure gracefully
@@ -93,8 +110,12 @@ class TestEnsureMkapidocsInstalled:
         # Arrange
         mocker.patch("mkapidocs.generator.which", return_value="/usr/local/bin/uv")
         mocker.patch("mkapidocs.generator._get_mkapidocs_repo_root", return_value=None)
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
-        mocker.patch("mkapidocs.generator._run_subprocess", side_effect=RuntimeError("Install failed"))
+        mocker.patch(
+            "mkapidocs.generator.is_mkapidocs_in_target_env", return_value=False
+        )
+        mocker.patch(
+            "mkapidocs.generator._run_subprocess", side_effect=OSError("Install failed")
+        )
         mock_console = mocker.patch("mkapidocs.generator.console")
 
         # Act
@@ -111,7 +132,9 @@ class TestEnsureMkapidocsInstalled:
                 break
         assert warning_printed
 
-    def test_removes_virtual_env_from_environment(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_removes_virtual_env_from_environment(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test that VIRTUAL_ENV is removed from environment before running uv.
 
         Tests: ensure_mkapidocs_installed unsets VIRTUAL_ENV
@@ -120,7 +143,9 @@ class TestEnsureMkapidocsInstalled:
         # Arrange
         mocker.patch("mkapidocs.generator.which", return_value="/usr/local/bin/uv")
         mocker.patch("mkapidocs.generator._get_mkapidocs_repo_root", return_value=None)
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=False)
+        mocker.patch(
+            "mkapidocs.generator.is_mkapidocs_in_target_env", return_value=False
+        )
         mocker.patch.dict("os.environ", {"VIRTUAL_ENV": "/some/venv"})
         mock_subprocess = mocker.patch("mkapidocs.generator._run_subprocess")
 
@@ -131,7 +156,9 @@ class TestEnsureMkapidocsInstalled:
         call_env = mock_subprocess.call_args[0][2]
         assert "VIRTUAL_ENV" not in call_env
 
-    def test_skips_install_when_already_present(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_skips_install_when_already_present(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test that installation is skipped if mkapidocs is already installed.
 
         Tests: ensure_mkapidocs_installed returns False if already installed
@@ -139,7 +166,9 @@ class TestEnsureMkapidocsInstalled:
         """
         # Arrange
         mocker.patch("mkapidocs.generator.which", return_value="/usr/local/bin/uv")
-        mocker.patch("mkapidocs.builder.is_mkapidocs_in_target_env", return_value=True)
+        mocker.patch(
+            "mkapidocs.generator.is_mkapidocs_in_target_env", return_value=True
+        )
         mock_subprocess = mocker.patch("mkapidocs.generator._run_subprocess")
 
         # Act

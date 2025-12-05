@@ -6,11 +6,11 @@ across the codebase. All YAML operations should go through this module.
 
 from __future__ import annotations
 
+import re
 from contextlib import suppress
 from dataclasses import dataclass
 from io import StringIO
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from rich import box
 from rich.console import Console
@@ -22,11 +22,25 @@ from ruamel.yaml.error import YAMLError
 from ruamel.yaml.scalarstring import LiteralScalarString, ScalarString
 from ruamel.yaml.util import load_yaml_guess_indent
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+# Index position for post-value comments in ruamel.yaml comment lists.
+# Comment lists follow the format: [pre, side, post, end]
+# Position 2 is where trailing blank lines and post-value comments are stored.
+_COMMENT_POST_VALUE_INDEX = 2
+
 # Initialize Rich console
 console = Console()
 
 # Re-export YAMLError for consumers that need to catch it
-__all__ = ["YAMLError", "append_to_yaml_list", "load_yaml", "load_yaml_preserve_format", "merge_mkdocs_yaml"]
+__all__ = [
+    "YAMLError",
+    "append_to_yaml_list",
+    "load_yaml",
+    "load_yaml_preserve_format",
+    "merge_mkdocs_yaml",
+]
 
 
 def load_yaml(content: str) -> dict[str, object] | None:
@@ -45,7 +59,7 @@ def load_yaml(content: str) -> dict[str, object] | None:
     with suppress(YAMLError):
         data = yaml.load(content)
         if isinstance(data, dict):
-            return cast(dict[str, object], data)
+            return cast("dict[str, object]", data)
     return None
 
 
@@ -68,7 +82,9 @@ def load_yaml_from_path(path: Path) -> dict[str, object] | None:
     return None
 
 
-def load_yaml_preserve_format(path: Path) -> tuple[dict[str, object] | None, tuple[int, int, int]]:
+def load_yaml_preserve_format(
+    path: Path,
+) -> tuple[dict[str, object] | None, tuple[int, int, int]]:
     """Load YAML file preserving format metadata for round-trip editing.
 
     Use this when you need to modify and write back a YAML file while
@@ -94,12 +110,16 @@ def load_yaml_preserve_format(path: Path) -> tuple[dict[str, object] | None, tup
 
     yaml = YAML()
     yaml.preserve_quotes = True
-    yaml.indent(mapping=indent_settings[0], sequence=indent_settings[1], offset=indent_settings[2])
+    yaml.indent(
+        mapping=indent_settings[0],
+        sequence=indent_settings[1],
+        offset=indent_settings[2],
+    )
 
     try:
         data = yaml.load(content)
         if isinstance(data, dict):
-            return cast(dict[str, object], data), indent_settings
+            return cast("dict[str, object]", data), indent_settings
     except YAMLError:
         pass
 
@@ -151,7 +171,13 @@ def _detect_yaml_indentation(content: str) -> tuple[int, int, int]:
 
     # mapping_indent is the basic nesting level for dict keys
     # When offset > 0, mapping = indent - offset
-    mapping_indent = indent - offset if offset > 0 and indent else indent if indent is not None else 2
+    mapping_indent = (
+        indent - offset
+        if offset > 0 and indent
+        else indent
+        if indent is not None
+        else 2
+    )
 
     return (mapping_indent, sequence_indent, offset)
 
@@ -175,29 +201,37 @@ def _preserve_scalar_style(
     return value
 
 
-def _copy_comment_attributes(source: CommentedSeq | CommentedMap, target: CommentedSeq | CommentedMap) -> None:
+def _copy_comment_attributes(source: object, target: object) -> None:
     """Copy ruamel.yaml comment attributes from source to target.
 
     This preserves blank lines, comments, and formatting metadata when
-    replacing a value in a CommentedMap/CommentedSeq.
+    replacing a value in a CommentedMap/CommentedSeq. Safely handles
+    any value types - non-commented values are silently skipped.
 
     Args:
         source: Original value with potential comment attributes
         target: New value to copy comments to
     """
-    # Both must have comment attributes (ca)
+    # Both must have comment attributes (ca) - silently skip scalar values
     if not hasattr(source, "ca") or not hasattr(target, "ca"):
         return
 
-    source_ca = source.ca
-    target_ca = target.ca
+    # After hasattr check, we know these are CommentedMap or CommentedSeq
+    source_commented = cast("CommentedSeq | CommentedMap", source)
+    target_commented = cast("CommentedSeq | CommentedMap", target)
+    source_ca = source_commented.ca
+    target_ca = target_commented.ca
 
     # Copy the main comment
     if source_ca.comment:
         target_ca.comment = source_ca.comment
 
     # For sequences, recursively copy item comments if lengths match
-    if isinstance(source, list) and isinstance(target, list) and len(source) == len(target):
+    if (
+        isinstance(source, list)
+        and isinstance(target, list)
+        and len(source) == len(target)
+    ):
         for _i, (src_item, tgt_item) in enumerate(zip(source, target, strict=False)):
             _copy_comment_attributes(src_item, tgt_item)
 
@@ -258,14 +292,16 @@ def display_file_changes(file_path: Path, changes: list[FileChange]) -> None:
         changes: List of FileChange records.
     """
     # Filter to only actual changes (not preserved)
-    actual_changes = [c for c in changes if c.action in ("added", "updated")]
+    actual_changes = [c for c in changes if c.action in {"added", "updated"}]
 
     # No actual changes - nothing to display
     if not actual_changes:
         return
 
     table = Table(
-        title=f":page_facing_up: Changes to {file_path.name}", box=box.MINIMAL_DOUBLE_HEAD, title_style="bold blue"
+        title=f":page_facing_up: Changes to {file_path.name}",
+        box=box.MINIMAL_DOUBLE_HEAD,
+        title_style="bold blue",
     )
 
     table.add_column("Key", style="cyan", no_wrap=True)
@@ -299,7 +335,8 @@ def _is_template_owned_key(current_path: str, template_owned_keys: set[str]) -> 
         True if the current_path matches or is a child of any template-owned key.
     """
     return any(
-        current_path == owned_key or current_path.startswith(owned_key + ".") for owned_key in template_owned_keys
+        current_path == owned_key or current_path.startswith(owned_key + ".")
+        for owned_key in template_owned_keys
     )
 
 
@@ -318,10 +355,15 @@ def _handle_template_owned_key(
     change = None
     if existing_value != template_value:
         if existing_value is None:
-            change = FileChange(key_path=current_path, action="added", new_value=str(template_value))
+            change = FileChange(
+                key_path=current_path, action="added", new_value=str(template_value)
+            )
         else:
             change = FileChange(
-                key_path=current_path, action="updated", old_value=str(existing_value), new_value=str(template_value)
+                key_path=current_path,
+                action="updated",
+                old_value=str(existing_value),
+                new_value=str(template_value),
             )
     new_value = _preserve_scalar_style(template_value)
     if existing_value is not None:
@@ -371,38 +413,60 @@ def _merge_yaml_in_place(
         existing_value = existing_yaml.get(key)
 
         if _is_template_owned_key(current_path, template_owned_keys):
-            change = _handle_template_owned_key(existing_yaml, key, current_path, existing_value, template_value)
+            change = _handle_template_owned_key(
+                existing_yaml, key, current_path, existing_value, template_value
+            )
             if change:
                 changes.append(change)
         elif isinstance(template_value, dict) and isinstance(existing_value, dict):
             existing_dict = existing_value
             template_dict = template_value
             nested_changes = _merge_yaml_in_place(
-                existing_dict, template_dict, template_owned_keys, current_path, depth + 1, max_depth
+                existing_dict,
+                template_dict,
+                template_owned_keys,
+                current_path,
+                depth + 1,
+                max_depth,
             )
             changes.extend(nested_changes)
         elif existing_value is not None:
             changes.append(
-                FileChange(key_path=current_path, action="preserved", old_value=str(existing_value), new_value=None)
+                FileChange(
+                    key_path=current_path,
+                    action="preserved",
+                    old_value=str(existing_value),
+                    new_value=None,
+                )
             )
         else:
             existing_yaml[key] = _preserve_scalar_style(template_value)
             template_str = str(template_value) if template_value is not None else ""
-            changes.append(FileChange(key_path=current_path, action="added", new_value=template_str))
+            changes.append(
+                FileChange(
+                    key_path=current_path, action="added", new_value=template_str
+                )
+            )
 
     # Record existing keys not in template (user additions) - already preserved, just log them
-    for key in existing_yaml:
+    for key, existing_value in existing_yaml.items():
         if key not in template_yaml:
             current_path = f"{key_prefix}.{key}" if key_prefix else key
-            existing_value = existing_yaml[key]
             changes.append(
-                FileChange(key_path=current_path, action="preserved", old_value=str(existing_value), new_value=None)
+                FileChange(
+                    key_path=current_path,
+                    action="preserved",
+                    old_value=str(existing_value),
+                    new_value=None,
+                )
             )
 
     return changes
 
 
-def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, list[FileChange]]:
+def merge_mkdocs_yaml(
+    existing_path: Path, template_content: str
+) -> tuple[str, list[FileChange]]:
     """Merge existing mkdocs.yml with template, preserving user customizations.
 
     Args:
@@ -416,7 +480,7 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
         CLIError: If YAML parsing fails or merge conflicts occur
     """
     # Read existing file text
-    existing_text = existing_path.read_text()
+    existing_text = existing_path.read_text(encoding="utf-8")
 
     # Detect and preserve original indentation style
     mapping_indent, sequence_indent, offset = _detect_yaml_indentation(existing_text)
@@ -437,9 +501,9 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
     template_for_parsing = template_content
     if "!!python/name:" in template_content:
         # Replace Python tags with placeholders for parsing structure
-        import re
-
-        template_for_parsing = re.sub(r"!!python/name:\S+", '"__PYTHON_TAG_PLACEHOLDER__"', template_content)
+        template_for_parsing = re.sub(
+            r"!!python/name:\S+", '"__PYTHON_TAG_PLACEHOLDER__"', template_content
+        )
 
     try:
         # Use safe_load for template as it's generated by us and we want standard dicts
@@ -481,7 +545,9 @@ def merge_mkdocs_yaml(existing_path: Path, template_content: str) -> tuple[str, 
     return merged_content, changes
 
 
-def _extract_trailing_comment(existing_list: CommentedSeq, last_idx: int) -> CommentedSeq | None:
+def _extract_trailing_comment(
+    existing_list: CommentedSeq, last_idx: int
+) -> CommentedSeq | None:
     """Extract trailing comment from the last item of a CommentedSeq.
 
     Handles two cases:
@@ -501,16 +567,22 @@ def _extract_trailing_comment(existing_list: CommentedSeq, last_idx: int) -> Com
     if isinstance(last_item, CommentedMap):
         for item_key in list(last_item.ca.items.keys()):
             comment_list = last_item.ca.items[item_key]
-            # Position 2 is post-value comment (where blank lines go)
-            if comment_list and len(comment_list) > 2 and comment_list[2] is not None:
-                trailing = comment_list[2]
-                comment_list[2] = None
+            # Check if post-value comment exists (where blank lines go)
+            if (
+                comment_list
+                and len(comment_list) > _COMMENT_POST_VALUE_INDEX
+                and comment_list[_COMMENT_POST_VALUE_INDEX] is not None
+            ):
+                trailing = comment_list[_COMMENT_POST_VALUE_INDEX]
+                comment_list[_COMMENT_POST_VALUE_INDEX] = None
                 # Return as full comment list for consistency
                 return CommentedSeq([None, None, trailing, None])
     return None
 
 
-def _apply_trailing_comment(existing_list: CommentedSeq, new_idx: int, comment_list: list[object]) -> None:
+def _apply_trailing_comment(
+    existing_list: CommentedSeq, new_idx: int, comment_list: list[object]
+) -> None:
     """Apply a trailing comment to the new last item of a CommentedSeq.
 
     Args:
@@ -521,11 +593,15 @@ def _apply_trailing_comment(existing_list: CommentedSeq, new_idx: int, comment_l
     new_item = existing_list[new_idx]
     if isinstance(new_item, CommentedMap):
         # For dict items, add post-value comment to the first key
-        trailing_token = comment_list[2] if len(comment_list) > 2 else None
+        trailing_token = (
+            comment_list[_COMMENT_POST_VALUE_INDEX]
+            if len(comment_list) > _COMMENT_POST_VALUE_INDEX
+            else None
+        )
         for item_key in new_item:
             if item_key not in new_item.ca.items:
                 new_item.ca.items[item_key] = [None, None, None, None]
-            new_item.ca.items[item_key][2] = trailing_token
+            new_item.ca.items[item_key][_COMMENT_POST_VALUE_INDEX] = trailing_token
             break
     elif isinstance(existing_list, CommentedSeq):
         # For plain values, add full comment list to list's ca.items
@@ -546,8 +622,6 @@ def append_to_yaml_list(file_path: Path, key: str, value: str | dict[str, str]) 
     Returns:
         True if successfully modified and saved, False if file structure invalid
     """
-    from ruamel.yaml.comments import CommentedMap, CommentedSeq
-
     content = file_path.read_text(encoding="utf-8")
 
     # Detect and preserve original indentation style
@@ -577,7 +651,9 @@ def append_to_yaml_list(file_path: Path, key: str, value: str | dict[str, str]) 
         trailing_comment = _extract_trailing_comment(existing_value, last_idx)
         existing_value.append(item_to_append)
         if trailing_comment is not None:
-            _apply_trailing_comment(existing_value, len(existing_value) - 1, list(trailing_comment))
+            _apply_trailing_comment(
+                existing_value, len(existing_value) - 1, list(trailing_comment)
+            )
     else:
         # Single entry - convert to list while preserving the original entry
         raw_config[key] = CommentedSeq([existing_value, item_to_append])
