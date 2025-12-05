@@ -33,15 +33,7 @@ uv sync
 
 ## Building C Extensions
 
-This project includes C/C++ extensions. A C compiler is required:
-
-**Linux/macOS:**
-- GCC or Clang should be available by default
-- Install build-essential on Ubuntu/Debian: `sudo apt install build-essential`
-
-**Windows:**
-- Install Microsoft Visual C++ Build Tools
-- Or use MinGW-w64
+This project includes C/C++ extensions. Ensure you have a working C/C++ compiler installed for your operating system.
 {% endif %}
 
 ## Verification
@@ -60,39 +52,19 @@ python -c "from importlib.metadata import version; print(version('{{ project_nam
 {% endif %}
 ```
 
-## Troubleshooting
 
-### Common Issues
-
-**Import Error**
-
-If you get an import error, ensure the package is installed in your active Python environment:
-
-```bash
-python -c "import {{ project_name.replace('-', '_') }}"
-```
-
-**Permission Error**
-
-uv automatically manages virtual environments, so permission errors should not occur. If you encounter permission issues, ensure uv is properly installed:
-
-```bash
-# Verify uv installation
-uv --version
-
-# Add the package to your project
-uv add {{ project_name }}
-```
-{% if c_source_dirs %}
-
-**C Extension Build Failure**
-
-If C extensions fail to build, ensure you have a working C compiler installed. See the "Building C Extensions" section above.
-{% endif %}
 
 ## Uninstallation
+{% if has_scripts %}
 
-To remove {{ project_name }} from your project:
+To uninstall the CLI tool:
+
+```bash
+uv tool uninstall {{ project_name }}
+```
+{% endif %}
+
+To remove from your project dependencies:
 
 ```bash
 uv remove {{ project_name }}
