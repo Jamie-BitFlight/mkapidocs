@@ -123,6 +123,11 @@ class PyprojectConfig(BaseModel):
         """Check if project defines CLI scripts in [project.scripts]."""
         return bool(self.project.scripts)
 
+    @property
+    def script_names(self) -> list[str]:
+        """Get CLI command names from [project.scripts]."""
+        return list(self.project.scripts.keys())
+
     @classmethod
     def from_dict(cls, data: TomlTable) -> PyprojectConfig:
         """Create PyprojectConfig from raw TOML dictionary.

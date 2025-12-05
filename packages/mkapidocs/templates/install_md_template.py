@@ -51,10 +51,12 @@ Verify the installation:
 ```bash
 # Check installed version
 python -c "from importlib.metadata import version; print(version('{{ project_name }}'))"
-{% if has_typer %}
+{% if has_typer and script_names %}
 
-# Display CLI help
-{{ project_name }} --help
+# Display CLI help (Typer CLI provides --help automatically)
+{% for cmd in script_names %}
+{{ cmd }} --help
+{% endfor %}
 {% endif %}
 ```
 

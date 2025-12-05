@@ -14,10 +14,6 @@ INDEX_MD_TEMPLATE = """# {{ project_name }}
 
 For detailed installation instructions, see the [Installation Guide](install.md).
 
-## Recently Updated
-
-<!-- RECENTLY_UPDATED_DOCS -->
-
 ## License
 
 {{ license }}

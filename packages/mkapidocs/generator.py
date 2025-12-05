@@ -1446,6 +1446,7 @@ def create_supporting_docs(
         "site_url": site_url,
         "has_private_registry": has_private_registry,
         "private_registry_url": private_registry_url,
+        "script_names": pyproject.script_names,
     }
 
     # Create install.md (only if doesn't exist - preserve user customizations)
