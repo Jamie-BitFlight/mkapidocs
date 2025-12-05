@@ -102,6 +102,18 @@ def _signal_handler(process: subprocess.Popen[bytes]) -> Generator[None, None, N
             sig_name = signal.Signals(signum).name
             console.print(f"[yellow]Received {sig_name}, stopping server...[/yellow]")
 
+        # If the process is already dead, just return
+        if process.poll() is not None:
+            return
+
+        # Give the child process a chance to handle the signal from the OS (process group)
+        try:
+            process.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            pass
+        else:
+            return
+
         # Send SIGINT to allow child process (e.g., mkdocs serve) to handle
         # KeyboardInterrupt and perform graceful shutdown
         process.send_signal(signal.SIGINT)
@@ -189,17 +201,20 @@ def _run_subprocess_with_interrupt(
     """
     process = subprocess.Popen(cmd, cwd=cwd, env=env)
 
-    with _signal_handler(process):
+    try:
+        return process.wait()
+    except KeyboardInterrupt:
+        # User hit Ctrl+C. The child process (and the whole process group)
+        # should have received the SIGINT from the OS.
+        # We just wait for it to exit gracefully.
         try:
-            return process.wait()
-        except KeyboardInterrupt:
-            # Forward SIGINT to child for graceful shutdown
-            process.send_signal(signal.SIGINT)
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-            return 0
+            return process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            # If it doesn't exit in time, kill it
+            if is_running_in_target_env():
+                console.print("[red]Process did not stop, killing...[/red]")
+            process.kill()
+            return -9
 
 
 def _get_mkdocs_plugins() -> list[str]:

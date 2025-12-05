@@ -6,17 +6,11 @@ Automated documentation setup tool for Python projects using MkDocs with GitHub 
 
 ## Quick Start
 
-```bash
-uv pip install mkapidocs
-```
+--8<-- "generated/install-command.md"
 
 --8<-- "generated/install-registry.md"
 
 For detailed installation instructions, see the [Installation Guide](install.md).
-
-## Recently Updated
-
-<!-- RECENTLY_UPDATED_DOCS -->
 
 ## License
 

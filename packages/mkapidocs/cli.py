@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 from tomlkit.exceptions import TOMLKitError
 
-from mkapidocs.builder import build_docs, serve_docs
+from mkapidocs.builder import build_docs, is_running_in_target_env, serve_docs
 from mkapidocs.generator import (
     console as generator_console,
     display_message,
@@ -463,13 +463,14 @@ def serve(
         raise typer.Exit(1)
 
     try:
-        display_message(
-            f"Starting documentation server for [bold cyan]{repo_path}[/bold cyan]...\n"
-            + f"Server address: [bold cyan]http://{host}:{port}[/bold cyan]\n"
-            + "Press Ctrl+C to stop",
-            MessageType.INFO,
-            title="Documentation Server",
-        )
+        if is_running_in_target_env():
+            display_message(
+                f"Starting documentation server for [bold cyan]{repo_path}[/bold cyan]...\n"
+                + f"Server address: [bold cyan]http://{host}:{port}[/bold cyan]\n"
+                + "Press Ctrl+C to stop",
+                MessageType.INFO,
+                title="Documentation Server",
+            )
 
         exit_code = serve_docs(repo_path, host=host, port=port)
 
@@ -479,15 +480,19 @@ def serve(
         handle_error(e, f"Server environment error: {e}")
     except OSError as e:
         handle_error(e, f"File system error: {e}")
+    except (KeyboardInterrupt, typer.Abort):
+        exit_code = 0
 
     if exit_code == 0:
-        display_message("Server stopped", MessageType.INFO, title="Server Stopped")
+        if is_running_in_target_env():
+            display_message("Server stopped", MessageType.INFO, title="Server Stopped")
     else:
-        display_message(
-            f"Server failed with exit code {exit_code}",
-            MessageType.ERROR,
-            title="Server Failed",
-        )
+        if is_running_in_target_env():
+            display_message(
+                f"Server failed with exit code {exit_code}",
+                MessageType.ERROR,
+                title="Server Failed",
+            )
         raise typer.Exit(exit_code)
 
 

@@ -131,7 +131,7 @@ jobs:
         run: uv sync
 
       - name: Build documentation
-        run: uv run mkapidocs build . --strict
+        run: uv run mkapidocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
