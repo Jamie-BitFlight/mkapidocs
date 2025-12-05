@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mkapidocs"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated documentation setup tool for Python projects using MkDocs with GitHub Pages or GitLab Pages. Intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, CI/CD workflows, and docstring linting configuration."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
