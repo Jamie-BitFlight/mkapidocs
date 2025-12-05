@@ -72,7 +72,10 @@ uv remove {{ project_name }}
 
 ## Next Steps
 
-- [API Reference](generated/python-api.md) - Explore the API documentation
+- [Python API Reference](generated/python-api.md) - Explore the Python API documentation
+{% if c_source_dirs %}
+- [C/C++ API Reference](generated/c-api.md) - C/C++ API documentation
+{% endif %}
 {% if has_typer %}
 - [CLI Reference](generated/cli-api.md) - Command-line interface documentation
 {% endif %}
