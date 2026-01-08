@@ -7,7 +7,9 @@ import pytest
 from mkapidocs.generator import create_github_actions, create_gitlab_ci
 
 
-def test_github_actions_existing_pages_job(mock_repo_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_github_actions_existing_pages_job(
+    mock_repo_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test that pages.yml is not created if a pages deployment job exists."""
     github_dir = mock_repo_path / ".github" / "workflows"
     github_dir.mkdir(parents=True, exist_ok=True)
@@ -66,10 +68,15 @@ jobs:
 
     # Verify success message
     captured = capsys.readouterr()
-    assert "Found existing pages deployment job 'deploy' in 'ci.yml' using mkapidocs" in captured.out
+    assert (
+        "Found existing pages deployment job 'deploy' in 'ci.yml' using mkapidocs"
+        in captured.out
+    )
 
 
-def test_github_actions_no_conflict(mock_repo_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_github_actions_no_conflict(
+    mock_repo_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test that pages.yml IS created if no pages deployment job exists."""
     github_dir = mock_repo_path / ".github" / "workflows"
     github_dir.mkdir(parents=True, exist_ok=True)
@@ -95,38 +102,56 @@ jobs:
     assert "Created pages.yml" in captured.out
 
 
-def test_gitlab_ci_existing_pages_job(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_gitlab_ci_existing_pages_job(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test when .gitlab-ci.yml already has a pages job (via include)."""
-    (tmp_path / ".gitlab-ci.yml").write_text("include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+    )
 
     # Create the included file too, to simulate a real setup
     workflows_dir = tmp_path / ".gitlab" / "workflows"
     workflows_dir.mkdir(parents=True)
-    (workflows_dir / "pages.gitlab-ci.yml").write_text("pages:\n  script:\n    - echo 'deploy'\n")
+    (workflows_dir / "pages.gitlab-ci.yml").write_text(
+        "pages:\n  script:\n    - echo 'deploy'\n"
+    )
 
     create_gitlab_ci(tmp_path)
 
-    assert (tmp_path / ".gitlab-ci.yml").read_text() == "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+    assert (
+        tmp_path / ".gitlab-ci.yml"
+    ).read_text() == "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
     captured = capsys.readouterr()
     assert "Found existing pages workflow include" in captured.out
 
 
-def test_gitlab_ci_existing_pages_job_with_mkapidocs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_gitlab_ci_existing_pages_job_with_mkapidocs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test when .gitlab-ci.yml already has a pages job using mkapidocs (via include)."""
-    (tmp_path / ".gitlab-ci.yml").write_text("include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n")
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+    )
 
     workflows_dir = tmp_path / ".gitlab" / "workflows"
     workflows_dir.mkdir(parents=True)
-    (workflows_dir / "pages.gitlab-ci.yml").write_text("pages:\n  script:\n    - uv run mkapidocs build\n")
+    (workflows_dir / "pages.gitlab-ci.yml").write_text(
+        "pages:\n  script:\n    - uv run mkapidocs build\n"
+    )
 
     create_gitlab_ci(tmp_path)
 
-    assert (tmp_path / ".gitlab-ci.yml").read_text() == "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
+    assert (
+        tmp_path / ".gitlab-ci.yml"
+    ).read_text() == "include:\n  - local: .gitlab/workflows/pages.gitlab-ci.yml\n"
     captured = capsys.readouterr()
     assert "Found existing pages workflow include" in captured.out
 
 
-def test_gitlab_ci_no_conflict(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_gitlab_ci_no_conflict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test when .gitlab-ci.yml exists but has no pages job."""
     (tmp_path / ".gitlab-ci.yml").write_text("stages:\n  - test\n")
 
@@ -138,4 +163,7 @@ def test_gitlab_ci_no_conflict(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert (tmp_path / ".gitlab" / "workflows" / "pages.gitlab-ci.yml").exists()
 
     captured = capsys.readouterr()
-    assert "Added include to .gitlab-ci.yml" in captured.out or "Appended include to .gitlab-ci.yml" in captured.out
+    assert (
+        "Added include to .gitlab-ci.yml" in captured.out
+        or "Appended include to .gitlab-ci.yml" in captured.out
+    )

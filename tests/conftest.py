@@ -173,7 +173,9 @@ build-backend = "hatchling.build"
 
 
 @pytest.fixture
-def mock_git_repo(mock_repo_path: Path, mocker: MockerFixture) -> Generator[Path, None, None]:
+def mock_git_repo(
+    mock_repo_path: Path, mocker: MockerFixture
+) -> Generator[Path, None, None]:
     """Mock a git repository with remote URL.
 
     Tests: Git remote URL detection
@@ -240,7 +242,9 @@ void helper_function();
 
 
 @pytest.fixture
-def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: TomlTable) -> Path:
+def mock_typer_cli_repo(
+    mock_repo_path: Path, mock_pyproject_with_typer: TomlTable
+) -> Path:
     """Create mock repository with Typer CLI application.
 
     Tests: Typer CLI module detection
@@ -293,7 +297,12 @@ def parsed_pyproject() -> PyprojectConfig:
         Minimal pyproject.toml configuration dictionary
     """
     data: TomlTable = {
-        "project": {"name": "test-project", "version": "0.1.0", "description": "Test project", "dependencies": []},
+        "project": {
+            "name": "test-project",
+            "version": "0.1.0",
+            "description": "Test project",
+            "dependencies": [],
+        },
         "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
     }
     return PyprojectConfig.from_dict(data)

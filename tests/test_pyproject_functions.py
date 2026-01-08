@@ -72,7 +72,9 @@ class TestWritePyproject:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        config = PyprojectConfig(project=ProjectConfig(name="new-project", version="1.0.0"))
+        config = PyprojectConfig(
+            project=ProjectConfig(name="new-project", version="1.0.0")
+        )
 
         # Act
         write_pyproject(mock_repo_path, config)
@@ -87,7 +89,9 @@ class TestWritePyproject:
         assert written_config["project"]["name"] == "new-project"
         assert written_config["project"]["version"] == "1.0.0"
 
-    def test_write_pyproject_overwrites_existing(self, mock_pyproject_toml: Path) -> None:
+    def test_write_pyproject_overwrites_existing(
+        self, mock_pyproject_toml: Path
+    ) -> None:
         """Test writing pyproject.toml overwrites existing file.
 
         Tests: write_pyproject replaces existing configuration
@@ -98,7 +102,9 @@ class TestWritePyproject:
             mock_pyproject_toml: Existing mock pyproject.toml
         """
         # Arrange
-        new_config = PyprojectConfig(project=ProjectConfig(name="updated-project", version="2.0.0"))
+        new_config = PyprojectConfig(
+            project=ProjectConfig(name="updated-project", version="2.0.0")
+        )
 
         # Act
         write_pyproject(mock_pyproject_toml.parent, new_config)
@@ -143,7 +149,8 @@ class TestUpdateRuffConfig:
         """
         # Arrange
         config = PyprojectConfig(
-            project=ProjectConfig(name="test"), tool={"ruff": {"lint": {"select": ["E", "F", "I"]}}}
+            project=ProjectConfig(name="test"),
+            tool={"ruff": {"lint": {"select": ["E", "F", "I"]}}},
         )
 
         # Act
