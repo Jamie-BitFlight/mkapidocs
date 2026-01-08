@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+
 from mkapidocs.generator import read_pyproject, update_ruff_config, write_pyproject
 
 # Import Pydantic models for test assertions
@@ -71,7 +72,9 @@ class TestWritePyproject:
             mock_repo_path: Temporary repository directory
         """
         # Arrange
-        config = PyprojectConfig(project=ProjectConfig(name="new-project", version="1.0.0"))
+        config = PyprojectConfig(
+            project=ProjectConfig(name="new-project", version="1.0.0")
+        )
 
         # Act
         write_pyproject(mock_repo_path, config)
@@ -80,13 +83,15 @@ class TestWritePyproject:
         pyproject_path = mock_repo_path / "pyproject.toml"
         assert pyproject_path.exists()
 
-        with open(pyproject_path, "rb") as f:
+        with Path(pyproject_path).open("rb") as f:
             written_config = tomllib.load(f)
 
         assert written_config["project"]["name"] == "new-project"
         assert written_config["project"]["version"] == "1.0.0"
 
-    def test_write_pyproject_overwrites_existing(self, mock_pyproject_toml: Path) -> None:
+    def test_write_pyproject_overwrites_existing(
+        self, mock_pyproject_toml: Path
+    ) -> None:
         """Test writing pyproject.toml overwrites existing file.
 
         Tests: write_pyproject replaces existing configuration
@@ -97,13 +102,15 @@ class TestWritePyproject:
             mock_pyproject_toml: Existing mock pyproject.toml
         """
         # Arrange
-        new_config = PyprojectConfig(project=ProjectConfig(name="updated-project", version="2.0.0"))
+        new_config = PyprojectConfig(
+            project=ProjectConfig(name="updated-project", version="2.0.0")
+        )
 
         # Act
         write_pyproject(mock_pyproject_toml.parent, new_config)
 
         # Assert
-        with open(mock_pyproject_toml, "rb") as f:
+        with Path(mock_pyproject_toml).open("rb") as f:
             written_config = tomllib.load(f)
 
         assert written_config["project"]["name"] == "updated-project"
@@ -142,7 +149,8 @@ class TestUpdateRuffConfig:
         """
         # Arrange
         config = PyprojectConfig(
-            project=ProjectConfig(name="test"), tool={"ruff": {"lint": {"select": ["E", "F", "I"]}}}
+            project=ProjectConfig(name="test"),
+            tool={"ruff": {"lint": {"select": ["E", "F", "I"]}}},
         )
 
         # Act

@@ -10,9 +10,10 @@ Tests cover:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
 from mkapidocs.generator import (
     GitLabPagesResult,
     detect_c_code,
@@ -23,7 +24,11 @@ from mkapidocs.generator import (
     query_gitlab_pages_url,
 )
 from mkapidocs.models import ProjectConfig, PyprojectConfig
-from pytest_mock import MockerFixture
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from pytest_mock import MockerFixture
 
 # Wrappers removed, using direct imports
 
@@ -91,7 +96,9 @@ class TestGitHubURLDetection:
         # Assert
         assert result == "https://test-owner.github.io/test-repo/"
 
-    def test_detect_github_url_ssh_without_git_suffix(self, mock_repo_path: Path) -> None:
+    def test_detect_github_url_ssh_without_git_suffix(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test GitHub URL detection with SSH format without .git suffix.
 
         Tests: detect_github_url_base handles URLs without .git extension
@@ -119,7 +126,9 @@ class TestGitHubURLDetection:
         # Assert
         assert result == "https://test-owner.github.io/test-repo/"
 
-    def test_detect_github_url_no_remote(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_detect_github_url_no_remote(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test GitHub URL detection when git remote fails.
 
         Tests: detect_github_url_base returns None for repositories without remote
@@ -142,7 +151,9 @@ class TestGitHubURLDetection:
         # Assert
         assert result is None
 
-    def test_detect_github_url_non_github_remote(self, mock_repo_path: Path, mocker: MockerFixture) -> None:
+    def test_detect_github_url_non_github_remote(
+        self, mock_repo_path: Path, mocker: MockerFixture
+    ) -> None:
         """Test GitHub URL detection with non-GitHub remote.
 
         Tests: detect_github_url_base returns None for GitLab/Bitbucket remotes
@@ -204,7 +215,9 @@ class TestCCodeDetection:
         source_dir = mock_repo_path / "source"
         source_dir.mkdir()
         (source_dir / "main.cpp").write_text("int main() { return 0; }")
-        (source_dir / "utils.hpp").write_text("#ifndef UTILS_HPP\n#define UTILS_HPP\n#endif")
+        (source_dir / "utils.hpp").write_text(
+            "#ifndef UTILS_HPP\n#define UTILS_HPP\n#endif"
+        )
 
         # Act
         result = detect_c_code(mock_repo_path)
@@ -229,7 +242,9 @@ class TestCCodeDetection:
         # Assert
         assert result == []
 
-    def test_detect_c_code_source_dir_exists_no_c_files(self, mock_repo_path: Path) -> None:
+    def test_detect_c_code_source_dir_exists_no_c_files(
+        self, mock_repo_path: Path
+    ) -> None:
         """Test C code detection when source/ exists but no C files.
 
         Tests: detect_c_code returns empty list with only Python files in source/
@@ -281,7 +296,9 @@ class TestTyperDependencyDetection:
     dependencies for the Typer package.
     """
 
-    def test_detect_typer_dependency_present(self, mock_pyproject_with_typer: PyprojectConfig) -> None:
+    def test_detect_typer_dependency_present(
+        self, mock_pyproject_with_typer: PyprojectConfig
+    ) -> None:
         """Test Typer dependency detection when typer in dependencies.
 
         Tests: detect_typer_dependency returns True when typer listed
@@ -297,7 +314,9 @@ class TestTyperDependencyDetection:
         # Assert
         assert result is True
 
-    def test_detect_typer_dependency_absent(self, parsed_pyproject: PyprojectConfig) -> None:
+    def test_detect_typer_dependency_absent(
+        self, parsed_pyproject: PyprojectConfig
+    ) -> None:
         """Test Typer dependency detection when typer not in dependencies.
 
         Tests: detect_typer_dependency returns False without typer
@@ -339,7 +358,11 @@ class TestTyperDependencyDetection:
 
         """
         # Arrange
-        pyproject = PyprojectConfig(project=ProjectConfig(name="test", dependencies=["TYPER>=0.9.0", "click>=8.0"]))
+        pyproject = PyprojectConfig(
+            project=ProjectConfig(
+                name="test", dependencies=["TYPER>=0.9.0", "click>=8.0"]
+            )
+        )
 
         # Act
         result = detect_typer_dependency(pyproject)
@@ -356,7 +379,9 @@ class TestTyperDependencyDetection:
             "  typer>=0.9.0  ",  # with whitespace
         ],
     )
-    def test_detect_typer_dependency_various_formats(self, dependency_string: str) -> None:
+    def test_detect_typer_dependency_various_formats(
+        self, dependency_string: str
+    ) -> None:
         """Test Typer dependency detection with various dependency formats.
 
         Tests: detect_typer_dependency handles version specifiers and extras
@@ -367,7 +392,9 @@ class TestTyperDependencyDetection:
             dependency_string: Various typer dependency formats
         """
         # Arrange
-        pyproject = PyprojectConfig(project=ProjectConfig(name="test", dependencies=[dependency_string]))
+        pyproject = PyprojectConfig(
+            project=ProjectConfig(name="test", dependencies=[dependency_string])
+        )
 
         # Act
         result = detect_typer_dependency(pyproject)
@@ -483,7 +510,9 @@ class TestPrivateRegistryDetection:
     private PyPI registry configuration in tool.uv.index.
     """
 
-    def test_detect_private_registry_present(self, mock_pyproject_with_private_registry: PyprojectConfig) -> None:
+    def test_detect_private_registry_present(
+        self, mock_pyproject_with_private_registry: PyprojectConfig
+    ) -> None:
         """Test private registry detection when configured.
 
         Tests: detect_private_registry returns True and URL when configured
@@ -494,13 +523,17 @@ class TestPrivateRegistryDetection:
             mock_pyproject_with_private_registry: Parsed pyproject with registry
         """
         # Act
-        is_private, registry_url = detect_private_registry(mock_pyproject_with_private_registry)
+        is_private, registry_url = detect_private_registry(
+            mock_pyproject_with_private_registry
+        )
 
         # Assert
         assert is_private is True
         assert registry_url == "https://private.pypi.org/simple"
 
-    def test_detect_private_registry_absent(self, parsed_pyproject: PyprojectConfig) -> None:
+    def test_detect_private_registry_absent(
+        self, parsed_pyproject: PyprojectConfig
+    ) -> None:
         """Test private registry detection when not configured.
 
         Tests: detect_private_registry returns False and None without config
@@ -527,7 +560,9 @@ class TestPrivateRegistryDetection:
         """
         # Arrange
         # Arrange
-        pyproject = PyprojectConfig(project=ProjectConfig(name="test"), tool={"uv": {"index": []}})
+        pyproject = PyprojectConfig(
+            project=ProjectConfig(name="test"), tool={"uv": {"index": []}}
+        )
 
         # Act
         is_private, registry_url = detect_private_registry(pyproject)
@@ -591,7 +626,13 @@ class TestGitLabPagesURLQuery:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "data": {
-                "project": {"pagesDeployments": {"nodes": [{"url": "https://group.pages.gitlab.example.com/project"}]}}
+                "project": {
+                    "pagesDeployments": {
+                        "nodes": [
+                            {"url": "https://group.pages.gitlab.example.com/project"}
+                        ]
+                    }
+                }
             }
         }
 
@@ -677,7 +718,13 @@ class TestGitLabPagesURLQuery:
         mock_response = mocker.MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "data": {"project": {"pagesDeployments": {"nodes": [{"url": "https://pages.example.com/project"}]}}}
+            "data": {
+                "project": {
+                    "pagesDeployments": {
+                        "nodes": [{"url": "https://pages.example.com/project"}]
+                    }
+                }
+            }
         }
 
         mock_client = mocker.MagicMock()
@@ -697,7 +744,9 @@ class TestGitLabPagesURLQuery:
         call_kwargs = mock_client.post.call_args
         assert call_kwargs[1]["headers"]["Authorization"] == "Bearer job-token"
 
-    def test_query_returns_no_deployments_when_empty(self, mocker: MockerFixture) -> None:
+    def test_query_returns_no_deployments_when_empty(
+        self, mocker: MockerFixture
+    ) -> None:
         """Test that query returns no_deployments flag when project has no Pages deployments.
 
         Tests: query_gitlab_pages_url returns no_deployments=True for empty deployments
@@ -707,7 +756,9 @@ class TestGitLabPagesURLQuery:
         mocker.patch.dict("os.environ", {"GITLAB_TOKEN": "test-token"})
         mock_response = mocker.MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"data": {"project": {"pagesDeployments": {"nodes": []}}}}
+        mock_response.json.return_value = {
+            "data": {"project": {"pagesDeployments": {"nodes": []}}}
+        }
 
         mock_client = mocker.MagicMock()
         mock_client.__enter__ = mocker.MagicMock(return_value=mock_client)

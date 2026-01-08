@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 import typer
+from pytest_mock import MockerFixture
+
 from mkapidocs.cli import (
     _configure_logging,
     _find_git_root,
@@ -17,7 +19,6 @@ from mkapidocs.generator import console as generator_console
 from mkapidocs.models import CIProvider
 from mkapidocs.validators import console as validators_console
 from mkapidocs.yaml_utils import console as yaml_console
-from pytest_mock import MockerFixture
 
 
 def test_find_git_root_at_root(mock_repo_path: Path) -> None:

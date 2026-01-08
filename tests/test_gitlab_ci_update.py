@@ -3,10 +3,13 @@
 from pathlib import Path
 
 import pytest
+
 from mkapidocs.generator import create_gitlab_ci
 
 
-def test_gitlab_ci_create_new(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_gitlab_ci_create_new(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test creating a new .gitlab-ci.yml."""
     create_gitlab_ci(tmp_path)
 
