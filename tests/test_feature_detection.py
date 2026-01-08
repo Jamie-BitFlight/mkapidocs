@@ -10,9 +10,10 @@ Tests cover:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
 from mkapidocs.generator import (
     GitLabPagesResult,
     detect_c_code,
@@ -23,7 +24,11 @@ from mkapidocs.generator import (
     query_gitlab_pages_url,
 )
 from mkapidocs.models import ProjectConfig, PyprojectConfig
-from pytest_mock import MockerFixture
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from pytest_mock import MockerFixture
 
 # Wrappers removed, using direct imports
 

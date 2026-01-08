@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from mkapidocs.generator import create_github_actions, create_gitlab_ci
 
 

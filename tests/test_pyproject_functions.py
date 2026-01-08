@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+
 from mkapidocs.generator import read_pyproject, update_ruff_config, write_pyproject
 
 # Import Pydantic models for test assertions
@@ -80,7 +81,7 @@ class TestWritePyproject:
         pyproject_path = mock_repo_path / "pyproject.toml"
         assert pyproject_path.exists()
 
-        with open(pyproject_path, "rb") as f:
+        with Path(pyproject_path).open("rb") as f:
             written_config = tomllib.load(f)
 
         assert written_config["project"]["name"] == "new-project"
@@ -103,7 +104,7 @@ class TestWritePyproject:
         write_pyproject(mock_pyproject_toml.parent, new_config)
 
         # Assert
-        with open(mock_pyproject_toml, "rb") as f:
+        with Path(mock_pyproject_toml).open("rb") as f:
             written_config = tomllib.load(f)
 
         assert written_config["project"]["name"] == "updated-project"
