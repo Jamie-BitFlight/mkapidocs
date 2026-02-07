@@ -59,7 +59,7 @@ packages = ["packages/mkapidocs"]
 target-version = "py311"
 fix = true
 unsafe-fixes = true
-src = ["packages", "scripts", "tests", "typings", ".gitlab", ".github"]
+src = ["packages", "tests", ".github"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -145,10 +145,6 @@ unfixable = ["F401"]
     "N",    # camelCase in test names acceptable when testing API fields
     "T",    # print() statements are intentional for CI output visibility
 ]
-"typings/**" = ["N", "ANN", "A"]
-"**/scripts/**" = [
-    "T201", # print() statements are intentional for CI output visibility
-]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 120
@@ -178,7 +174,7 @@ ignore_missing_imports = true
 show_error_codes = true
 pretty = true
 disable_error_code = ["call-arg", "misc"]
-mypy_path = ["packages", "scripts", "."]
+mypy_path = ["packages", "."]
 
 [[tool.mypy.overrides]]
 module = [
@@ -205,8 +201,8 @@ reportMissingTypeStubs = false
 reportUnnecessaryTypeIgnoreComment = "error"
 reportPrivateImportUsage = false
 reportImplicitRelativeImport = false
-include = ["**/packages", "**/scripts"]
-extraPaths = ["**/packages", "**/scripts", "**/tests"]
+include = ["**/packages"]
+extraPaths = ["**/packages", "**/tests"]
 ignore = ["**/typings", "**/tests"]
 
 
