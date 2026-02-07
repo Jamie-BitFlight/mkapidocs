@@ -3,7 +3,6 @@
 Tests cover:
 - mkdocs.yml generation with conditional plugins
 - GitHub Actions workflow generation
-- gen_ref_pages.py script generation
 - Documentation structure creation (index.md, API reference)
 - Feature-conditional template rendering (Typer, C code, private registry)
 - YAML merge behavior for existing configurations
