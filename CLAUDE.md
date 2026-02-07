@@ -69,7 +69,7 @@ Source lives in `packages/mkapidocs/`. Key modules:
 - **console.py** — Shared Rich console instance and display helpers
 - **version.py** — VCS-based version via hatchling, fallback to importlib.metadata
 - **templates/** — Jinja2 templates (mkdocs.yml.j2), static CI workflows (pages.yml, gitlab-ci.yml), markdown content templates (*_template.py)
-- **resources/** — Runtime resources copied to target projects (gen_ref_pages.py)
+- **resources/** — Runtime resources for target projects
 
 ### Target Project Environment Integration
 
