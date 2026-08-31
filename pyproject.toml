@@ -66,7 +66,6 @@ pythonpath = ["packages"]
 testpaths = ["tests"]
 
 [tool.ruff]
-fix = true
 src = [".github", "packages", "tests"]
 target-version = "py311"
 unsafe-fixes = true
