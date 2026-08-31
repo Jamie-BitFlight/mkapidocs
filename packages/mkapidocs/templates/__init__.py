@@ -1,5 +1,7 @@
 """Template module exports."""
 
+from __future__ import annotations
+
 from importlib.resources import files
 
 from .c_api_md_template import C_API_MD_TEMPLATE

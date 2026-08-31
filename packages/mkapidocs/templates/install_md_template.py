@@ -1,5 +1,7 @@
 """Installation guide template."""
 
+from __future__ import annotations
+
 INSTALL_MD_TEMPLATE = """# Installation
 
 This guide provides detailed installation instructions for {{ project_name }}.

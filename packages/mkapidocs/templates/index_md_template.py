@@ -1,5 +1,7 @@
 """Template for the index.md page."""
 
+from __future__ import annotations
+
 INDEX_MD_TEMPLATE = """# {{ project_name }}
 
 {{ description }}

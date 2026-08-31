@@ -29,7 +29,7 @@ uv run pytest tests/test_cli_commands.py -v  # Single file
 ```bash
 uv run ruff check .              # Auto-fixes issues
 uv run ruff format .             # Format code
-uv run mypy packages/mkapidocs/  # ~6s, expect 0 errors (optional)
+uv run ty check                  # Type check (optional)
 ```
 
 ### Documentation
@@ -63,7 +63,7 @@ uv run mkapidocs serve .         # Live preview at :8000
 
 ## Code Standards
 
-**Style:** 120 char lines | Type hints required (mypy strict) | Google docstrings | Double quotes
+**Style:** 120 char lines | Type hints required (checked by ty) | Google docstrings | Double quotes
 **Modern syntax:** `dict[str, Any]`, `str | None` (not `Dict`, `Optional`)
 **Naming:** `snake_case` functions, `PascalCase` classes, `UPPER_SNAKE` constants
 

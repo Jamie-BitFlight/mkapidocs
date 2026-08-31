@@ -61,13 +61,8 @@ jobs:
       - name: Run ruff
         run: uv run ruff check .
 
-      - name: Run mypy
-        run: uv run mypy . || true
-        continue-on-error: true
-
-      - name: Run basedpyright
-        run: uv run basedpyright . || true
-        continue-on-error: true
+      - name: Run ty
+        run: uv run ty check
 
   release:
     name: Semantic Release

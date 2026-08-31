@@ -28,6 +28,8 @@ Usage:
     ./run-pytest.py --cov        # Run with coverage report
 """
 
+from __future__ import annotations
+
 import sys
 
 import pytest
