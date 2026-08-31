@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-12-05)
+
+### Bug Fixes
+
+- Use Jinja2 whitespace control in nav template to prevent blank lines
+  ([`3f86836`](https://github.com/Jamie-BitFlight/mkapidocs/commit/3f868363507e3499d05936bd8e5741e36e6e3e87))
+
+### Continuous Integration
+
+- Add workflow_dispatch triggers and remove obsolete script upload step
+  ([`52db83e`](https://github.com/Jamie-BitFlight/mkapidocs/commit/52db83e49ee0c6c038765890b54e25665f85d8bf))
+
+
 ## v0.1.0 (2025-12-05)
 
 ### Bug Fixes

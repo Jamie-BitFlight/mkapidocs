@@ -1,6 +1,6 @@
 [project]
 name = "mkapidocs"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated documentation setup tool for Python projects using MkDocs with GitHub Pages or GitLab Pages. Intelligently detects project features (C/C++ code, Typer CLI, private registries) and generates comprehensive MkDocs documentation with Material theme, API references, CI/CD workflows, and docstring linting configuration."
 readme = "README.md"
 authors = [{name = "Jamie Nelson", email = "jamie.nelson@assaabloy.com"}]
@@ -66,7 +66,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 fix = true
-src = [".github", ".gitlab", "packages", "scripts", "tests", "typings"]
+src = [".github", "packages", "tests"]
 target-version = "py311"
 unsafe-fixes = true
 
@@ -156,9 +156,6 @@ split-on-trailing-comma = false
 max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
-"**/scripts/**" = [
-    "T201", # print() statements are intentional for CI output visibility
-]
 "**/tests/**" = [
     "ANN", # Type annotations optional for test fixtures/methods
     "D", # Docstring requirements relaxed for tests
@@ -172,7 +169,6 @@ max-complexity = 12
     "SLF", # Private name imports acceptable for testing internals
     "T", # print() statements are intentional for CI output visibility
 ]
-"typings/**" = ["A", "ANN", "N"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 120
@@ -184,7 +180,7 @@ convention = "google"
 disable_error_code = ["call-arg", "misc"]
 extra_checks = true
 ignore_missing_imports = true
-mypy_path = ["packages", "scripts", "."]
+mypy_path = ["packages", "."]
 pretty = true
 python_version = "3.11"
 show_error_codes = true
@@ -211,9 +207,9 @@ module = [
 ]
 
 [tool.basedpyright]
-extraPaths = ["**/packages", "**/scripts", "**/tests"]
+extraPaths = ["**/packages", "**/tests"]
 ignore = ["**/typings", "**/tests"]
-include = ["**/packages", "**/scripts"]
+include = ["**/packages"]
 pythonVersion = "3.11"
 reportImplicitRelativeImport = false
 reportMissingImports = false

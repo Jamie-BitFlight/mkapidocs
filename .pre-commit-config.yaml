@@ -116,20 +116,6 @@ repos:
         types: [python]
         pass_filenames: true
 
-      - id: robotidy
-        name: Format Robot Framework files
-        entry: uv run -q --no-sync --with robotframework-tidy robotidy --check --diff robotTests/
-        language: system
-        files: \.robot$
-        pass_filenames: false
-
-      - id: robocop
-        name: Lint Robot Framework files
-        entry: uv run -q --no-sync --with robotframework-robocop robocop robotTests/
-        language: system
-        files: \.robot$
-        pass_filenames: false
-
 # Configuration for specific hooks
 default_language_version:
   python: python3
@@ -143,6 +129,5 @@ exclude: |
     \.mypy_cache/|
     \.cache/|
     \.pytest_cache/|
-    \.lock$|
-    typings/
+    \.lock$
   )

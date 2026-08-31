@@ -7,13 +7,18 @@ All fixtures follow modern Python 3.11+ type hint syntax and pytest-mock standar
 from __future__ import annotations
 
 import sys
-from collections.abc import Generator
 from pathlib import Path
-from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
+
 from mkapidocs.models import PyprojectConfig, TomlTable
-from pytest_mock import MockerFixture
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from types import ModuleType
+
+    from pytest_mock import MockerFixture
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -124,7 +129,7 @@ build-backend = "hatchling.build"
     pyproject_path = mock_repo_path / "pyproject.toml"
     pyproject_path.write_text(pyproject_content)
 
-    with open(pyproject_path, "rb") as f:
+    with Path(pyproject_path).open("rb") as f:
         data = tomllib.load(f)
     return PyprojectConfig.from_dict(data)
 
@@ -162,13 +167,15 @@ build-backend = "hatchling.build"
     pyproject_path = mock_repo_path / "pyproject.toml"
     pyproject_path.write_text(pyproject_content)
 
-    with open(pyproject_path, "rb") as f:
+    with Path(pyproject_path).open("rb") as f:
         data = tomllib.load(f)
     return PyprojectConfig.from_dict(data)
 
 
 @pytest.fixture
-def mock_git_repo(mock_repo_path: Path, mocker: MockerFixture) -> Generator[Path, None, None]:
+def mock_git_repo(
+    mock_repo_path: Path, mocker: MockerFixture
+) -> Generator[Path, None, None]:
     """Mock a git repository with remote URL.
 
     Tests: Git remote URL detection
@@ -189,7 +196,7 @@ def mock_git_repo(mock_repo_path: Path, mocker: MockerFixture) -> Generator[Path
 
     mocker.patch("subprocess.run", return_value=mock_result)
 
-    yield mock_repo_path
+    return mock_repo_path
 
 
 @pytest.fixture
@@ -235,7 +242,9 @@ void helper_function();
 
 
 @pytest.fixture
-def mock_typer_cli_repo(mock_repo_path: Path, mock_pyproject_with_typer: TomlTable) -> Path:
+def mock_typer_cli_repo(
+    mock_repo_path: Path, mock_pyproject_with_typer: TomlTable
+) -> Path:
     """Create mock repository with Typer CLI application.
 
     Tests: Typer CLI module detection
@@ -288,7 +297,12 @@ def parsed_pyproject() -> PyprojectConfig:
         Minimal pyproject.toml configuration dictionary
     """
     data: TomlTable = {
-        "project": {"name": "test-project", "version": "0.1.0", "description": "Test project", "dependencies": []},
+        "project": {
+            "name": "test-project",
+            "version": "0.1.0",
+            "description": "Test project",
+            "dependencies": [],
+        },
         "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
     }
     return PyprojectConfig.from_dict(data)

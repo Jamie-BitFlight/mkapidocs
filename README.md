@@ -224,9 +224,8 @@ your-project/
 │   ├── contributing.md                 # Contributing guide
 │   ├── publishing.md                   # Publishing guide
 │   └── generated/                      # Auto-generated content (always regenerated)
-│       ├── gen_ref_pages.py            # API reference generation script
 │       ├── index-features.md           # Feature list
-│       ├── install-registry.md         # Private registry instructions (if detected)
+│       ├── install-command.md          # Installation instructions
 │       ├── python-api.md               # Python API reference
 │       ├── c-api.md                    # C API reference (if C code detected)
 │       └── cli-api.md                  # CLI reference (if Typer detected)
