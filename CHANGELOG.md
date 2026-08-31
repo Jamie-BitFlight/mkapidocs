@@ -204,7 +204,7 @@ BREAKING CHANGE: The executable is now named 'mkapidocs' instead of 'python-docs
 - Add comprehensive improvement documentation and Phase 1 implementation plan
   ([`c0f381e`](https://github.com/Jamie-BitFlight/mkapidocs/commit/c0f381e358e2150c1df37a83c5ca830a8748549d))
 
-Added documentation from documentation-expert and spec-planner agents.
+Added documentation from documentation-expert and swarm-task-planner agents.
 
 ## Documentation Files Added
 
@@ -223,7 +223,7 @@ Added documentation from documentation-expert and spec-planner agents.
 5. **IMPROVEMENTS_COMPLETE.md** (350+ lines): - Executive summary - Metrics and achievements - Key
   code improvements
 
-## Implementation Plan (spec-planner)
+## Implementation Plan (swarm-task-planner)
 
 **File:** .claude/plans/phase1-implementation-plan.md
 

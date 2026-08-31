@@ -1,52 +1,60 @@
-# CLAUDE.md
+# mkapidocs - AI Agent Instructions
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+<identity>
+mkapidocs: Installable Python package automating MkDocs documentation setup for Python projects. Supports GitHub Pages and GitLab Pages deployment with intelligent feature detection for C/C++ code and Typer CLI applications.
+</identity>
 
-## Required Skills
+<critical_requirements>
 
-**The orchestrator must load the python3-development skill before working on any task.**
+## Skill Loading (MANDATORY)
 
-**The orchestrator must mention in the prompts provided to the sub-agents that the skills for mkdocs, hatchling, uv, and python3-development should be enabled before starting their task.**
-
-## Project Overview
-
-mkapidocs is an installable Python package that automates MkDocs documentation setup for Python projects. It supports both GitHub Pages and GitLab Pages deployment, with intelligent feature detection for C/C++ code and Typer CLI applications.
-
-## Architecture
-
-### Package Structure
-
-The project follows standard Python package layout with hatchling build system:
-
+```mermaid
+flowchart TD
+    Start([Task begins]) --> Load[Load python3-development skill]
+    Load --> Delegate{Delegating to sub-agent?}
+    Delegate -->|Yes| Mention[Mention in prompt: Enable mkdocs, hatchling, uv, python3-development skills]
+    Delegate -->|No| Proceed[Proceed with task]
+    Mention --> Proceed
 ```
+
+Orchestrator MUST load python3-development skill before any task.
+
+Sub-agent prompts MUST include: "Enable mkdocs, hatchling, uv, and python3-development skills before starting."
+
+</critical_requirements>
+
+---
+
+<architecture>
+
+## Package Structure
+
+```text
 mkapidocs/
-├── packages/
-│   └── mkapidocs/           # Main package
-│       ├── __init__.py      # Package init with version
-│       ├── cli.py           # Typer CLI entry point
-│       ├── builder.py       # Build/serve logic with environment detection
-│       ├── generator.py     # Content generation and CI/CD setup
-│       ├── validators.py    # Environment and project validation
-│       ├── models.py        # Pydantic models and enums
-│       ├── yaml_utils.py    # YAML merge utilities
-│       ├── version.py       # Version string
-│       ├── templates/       # Jinja2 and static templates
-│       │   ├── mkdocs.yml.j2        # MkDocs config template
-│       │   ├── pages.yml            # GitHub Actions workflow
-│       │   ├── gitlab-ci.yml        # GitLab CI workflow
-│       │   └── *_template.py        # Markdown content templates
-│       └── resources/       # Runtime resources
-│           └── gen_ref_pages.py     # API docs generation script
-├── tests/                   # Test suite
-├── pyproject.toml           # Package configuration
+├── packages/mkapidocs/           # Main package
+│   ├── __init__.py               # Package init with version
+│   ├── cli.py                    # Typer CLI entry point
+│   ├── builder.py                # Build/serve logic with environment detection
+│   ├── generator.py              # Content generation and CI/CD setup
+│   ├── validators.py             # Environment and project validation
+│   ├── models.py                 # Pydantic models and enums
+│   ├── yaml_utils.py             # YAML merge utilities
+│   ├── version.py                # Version string
+│   ├── templates/                # Jinja2 and static templates
+│   │   ├── mkdocs.yml.j2         # MkDocs config template
+│   │   ├── pages.yml             # GitHub Actions workflow
+│   │   ├── gitlab-ci.yml         # GitLab CI workflow
+│   │   └── *_template.py         # Markdown content templates
+│   └── resources/                # Runtime resources
+│       └── gen_ref_pages.py      # API docs generation script
+├── tests/                        # Test suite
+├── pyproject.toml                # Package configuration
 └── README.md
 ```
 
-### Key Components
+## Module Responsibilities
 
-The package is organized into separate modules:
-
-- **cli.py**: Typer CLI entry point with commands (version, info, setup, build, serve)
+- **cli.py**: Typer CLI entry point (commands: version, info, setup, build, serve)
 - **generator.py**: Content generation, CI/CD workflow creation, feature detection, YAML merge system
 - **builder.py**: Build/serve logic with target environment detection and uvx fallback
 - **validators.py**: Environment and project validation with DoxygenInstaller
@@ -55,58 +63,96 @@ The package is organized into separate modules:
 - **templates/**: Jinja2 templates and static workflow files
 - **resources/**: Runtime resources (gen_ref_pages.py copied to target projects)
 
-### Template Rendering Flow
+## Template Rendering Flow
 
-1. Detect project features (C code, Typer CLI, private registry)
-2. Read pyproject.toml metadata
-3. Render Jinja2 templates with detected features
-4. Write generated files to target project directory
+```mermaid
+flowchart TD
+    Start([Template rendering begins]) --> Detect[Detect project features: C code, Typer CLI, private registry]
+    Detect --> Read[Read pyproject.toml metadata]
+    Read --> Render[Render Jinja2 templates with detected features]
+    Render --> Write[Write generated files to target project directory]
+```
 
-### Target Project Environment Integration
+## Target Project Environment Integration
 
-For CLI documentation to render correctly, mkapidocs detects when it's installed as a dev dependency in the target project and runs `mkdocs build` directly within that environment. This allows mkdocs-typer2 to import the target project's CLI module with all dependencies available.
+CLI documentation requires mkapidocs installed as dev dependency in target project. Enables mkdocs-typer2 to import CLI module with all dependencies.
 
-The flow is:
+```mermaid
+flowchart TD
+    External[External call: mkapidocs build /path/to/project] --> DetectDev{mkapidocs in target dev deps?}
+    DetectDev -->|Yes| Reentry[Call: uv run mkapidocs build .<br>Environment: MKAPIDOCS_INTERNAL_CALL=1]
+    DetectDev -->|No| DirectBuild[Call mkdocs build directly]
+    Reentry --> DetectInternal{MKAPIDOCS_INTERNAL_CALL=1?}
+    DetectInternal -->|Yes| DirectBuild
+    DirectBuild --> Import[mkdocs-typer2 imports CLI module successfully]
+    Import --> Done[Full documentation generated]
+```
 
-1. External call: `mkapidocs build /path/to/project`
-2. Detects mkapidocs in target's dev deps → calls `uv run mkapidocs build .` with `MKAPIDOCS_INTERNAL_CALL=1`
-3. Internal call: Detects `MKAPIDOCS_INTERNAL_CALL=1` → calls `mkdocs build` directly
-4. mkdocs-typer2 imports CLI module successfully → full documentation generated
+</architecture>
 
-## CLI Commands
+---
 
-All commands follow the pattern: `mkapidocs <command> [args]` or `uv run mkapidocs <command> [args]`
+<cli_interface>
 
-- `version` - Show version information
-- `info` - Display package metadata and installation details
-- `setup <path> [--provider {github|gitlab}] [--site-url URL]` - Set up MkDocs documentation for a Python project
-- `build <path> [--strict] [--output-dir PATH]` - Build documentation to static site
-- `serve <path> [--host HOST] [--port PORT]` - Serve documentation with live preview
+## Commands
 
-### setup Command
+Pattern: `mkapidocs <command> [args]` or `uv run mkapidocs <command> [args]`
 
-The `setup` command configures MkDocs documentation and CI/CD workflows for your project.
+### version
+Show version information.
 
-**Provider Auto-Detection:**
+```bash
+mkapidocs version
+```
 
-1. First: Checks git remote URL for `github` or `gitlab` word in the domain (supports enterprise instances)
-2. Second: Checks filesystem for `.gitlab-ci.yml`, `.gitlab/`, or `.github/` directories
-3. Third: Fails with error if provider cannot be determined
+### info
+Display package metadata and installation details.
+
+```bash
+mkapidocs info
+```
+
+### setup
+Configure MkDocs documentation and CI/CD workflows.
+
+```bash
+mkapidocs setup <path> [OPTIONS]
+```
+
+**Options:**
+- `--provider {github|gitlab}` - Override provider auto-detection
+- `--site-url URL` - Override all URL detection
+- `--c-source-dirs DIRS` - C/C++ source directories (comma-separated)
+- `--quiet, -q` - Suppress output (errors only)
+
+**Provider Auto-Detection Logic:**
+
+```mermaid
+flowchart TD
+    Start([setup command]) --> Remote[Check git remote URL for github/gitlab domain]
+    Remote --> Found1{Domain found?}
+    Found1 -->|Yes| Use1[Use detected provider]
+    Found1 -->|No| FS[Check filesystem for .gitlab-ci.yml, .gitlab/, .github/]
+    FS --> Found2{Indicator found?}
+    Found2 -->|Yes| Use2[Use detected provider]
+    Found2 -->|No| Error[Fail with error: Cannot determine provider]
+```
+
+Supports enterprise instances (searches domain for keywords).
 
 **Site URL Detection (GitLab):**
 
-For GitLab projects, mkapidocs can query the GitLab GraphQL API to get the actual Pages URL:
+```mermaid
+flowchart TD
+    Start([GitLab project detected]) --> Token{GITLAB_TOKEN or CI_JOB_TOKEN set?}
+    Token -->|Yes| Query[Query GitLab GraphQL API]
+    Token -->|No| Heuristic[Use heuristic URL placeholder]
+    Query --> Deployed{Pages deployed?}
+    Deployed -->|Yes| Exact[Retrieve exact URL from API]
+    Deployed -->|No| Heuristic
+```
 
-1. Set `GITLAB_TOKEN` or `CI_JOB_TOKEN` environment variable (requires `read_api` scope)
-2. If Pages is deployed, the exact URL is retrieved from the API
-3. If Pages is not yet deployed, a heuristic URL is used as a placeholder
-
-**Options:**
-
-- `--provider {github|gitlab}` - Explicitly specify CI/CD provider (bypasses auto-detection)
-- `--site-url URL` - Explicitly specify the Pages URL (bypasses all URL detection)
-- `--c-source-dirs DIRS` - Directories containing C/C++ source code (comma-separated)
-- `--quiet, -q` - Suppress output (only show errors)
+Requires `read_api` scope for API access.
 
 **Examples:**
 
@@ -120,41 +166,74 @@ mkapidocs setup /path/to/project --provider github
 # Explicitly use GitLab CI
 mkapidocs setup /path/to/project --provider gitlab
 
-# Explicitly specify the Pages URL (useful for enterprise GitLab)
+# Explicitly specify Pages URL (enterprise GitLab)
 mkapidocs setup /path/to/project --site-url https://mygroup.pages.gitlab.example.com/myproject
 
 # With GITLAB_TOKEN for API-based URL detection
 GITLAB_TOKEN=glpat-xxx mkapidocs setup /path/to/project
+```
 
-# Other commands
-mkapidocs version
+### build
+Build documentation to static site.
+
+```bash
+mkapidocs build <path> [OPTIONS]
+```
+
+**Options:**
+- `--strict` - Fail on warnings
+- `--output-dir PATH` - Custom output directory
+
+**Example:**
+
+```bash
 mkapidocs build . --strict
+```
+
+### serve
+Serve documentation with live preview.
+
+```bash
+mkapidocs serve <path> [OPTIONS]
+```
+
+**Options:**
+- `--host HOST` - Bind host
+- `--port PORT` - Bind port
+
+**Example:**
+
+```bash
 mkapidocs serve .
 ```
 
-## Development Commands
+</cli_interface>
 
-### Prerequisites
+---
 
-Ensure mkdocs skill is enabled at task start (this repo uses MkDocs for its own docs).
+<development_workflows>
 
-### Linting and Formatting
+## Prerequisites
+
+Enable mkdocs skill at task start (this repo uses MkDocs for its own documentation).
+
+## Linting and Formatting
 
 ```bash
-# Run ruff linter
+# Ruff linter
 uv run ruff check packages/mkapidocs/
 
-# Run ruff formatter
+# Ruff formatter
 uv run ruff format packages/mkapidocs/
 
-# Run mypy type checker
+# Mypy type checker
 uv run mypy packages/mkapidocs/
 
-# Run basedpyright type checker
+# Basedpyright type checker
 uv run basedpyright packages/mkapidocs/
 ```
 
-### Testing
+## Testing
 
 ```bash
 # Run tests with coverage
@@ -164,7 +243,7 @@ uv run pytest
 uv run pytest tests/test_cli_commands.py -v
 ```
 
-### Running the Package
+## Running the Package
 
 ```bash
 # Via uv run
@@ -174,7 +253,7 @@ uv run mkapidocs --help
 uv run mkapidocs setup /path/to/test/project
 ```
 
-### Building This Project's Documentation
+## Building This Project's Documentation
 
 ```bash
 # Serve docs locally
@@ -184,9 +263,9 @@ uv run mkapidocs serve .
 uv run mkapidocs build .
 ```
 
-### Pre-commit Hooks
+## Pre-commit Hooks
 
-The project uses pre-commit for automated quality checks. The configuration includes:
+Configuration includes:
 
 - **mkapidocs-regen**: Runs `mkapidocs setup .` to regenerate documentation when Python files, pyproject.toml, or mkdocs.yml change
 - **Standard hooks**: trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml
@@ -195,66 +274,84 @@ The project uses pre-commit for automated quality checks. The configuration incl
 - **Shellcheck**: Shell script linting
 - **Prettier**: YAML/JSON/Markdown formatting
 
-## Important Implementation Details
+</development_workflows>
 
-### Git URL Detection
+---
 
-The package extracts Pages URLs from git remotes. It handles:
+<implementation_details>
 
-- SSH format: `git@github.com:user/repo.git` or `git@gitlab.com:user/repo.git`
-- HTTPS format: `https://github.com/user/repo.git` or `https://gitlab.com/user/repo.git`
-- Converts to Pages URL format: `https://user.github.io/repo/` or `https://user.gitlab.io/repo/`
+## Git URL Detection
 
-### Source Path Detection
+Extracts Pages URLs from git remotes.
 
-The `get_source_paths_from_pyproject()` function extracts package locations from pyproject.toml to set PYTHONPATH for mkdocstrings. It checks:
+**Handles:**
+- SSH: `git@github.com:user/repo.git` or `git@gitlab.com:user/repo.git`
+- HTTPS: `https://github.com/user/repo.git` or `https://gitlab.com/user/repo.git`
 
-- `[tool.hatch.build.targets.wheel]` with `packages` or `sources` mapping
-- `[tool.setuptools.packages.find]` with `where` key
-- Falls back to `src/` if no explicit configuration
+**Converts to:**
+- GitHub Pages: `https://user.github.io/repo/`
+- GitLab Pages: `https://user.gitlab.io/repo/`
 
-### Doxygen Installer
+## Source Path Detection
 
-For C/C++ documentation, the package can download and install Doxygen if not present:
+`get_source_paths_from_pyproject()` extracts package locations from pyproject.toml to set PYTHONPATH for mkdocstrings.
 
+**Checks (in order):**
+1. `[tool.hatch.build.targets.wheel]` with `packages` or `sources` mapping
+2. `[tool.setuptools.packages.find]` with `where` key
+3. Falls back to `src/`
+
+## Doxygen Installer
+
+Downloads and installs Doxygen for C/C++ documentation when absent.
+
+**Process:**
 - Downloads from official GitHub releases
 - Verifies SHA256 checksum
 - Extracts to `~/.local/bin/`
 - Platform-specific (Linux x86_64 only currently)
 
-### CLI Module Detection
+## CLI Module Detection
 
-For Typer CLI apps, the package attempts to find the CLI entry point by:
+Finds Typer CLI entry point for documentation generation.
 
-1. Checking `[project.scripts]` for entry points
-2. Parsing entry point format `module:app_object`
-3. Falling back to common patterns if not found
+**Process:**
+1. Check `[project.scripts]` for entry points
+2. Parse entry point format `module:app_object`
+3. Fall back to common patterns if not found
 
 ## MkDocs Configuration Strategy
 
-The generated mkdocs.yml is feature-conditional:
+Generated mkdocs.yml is feature-conditional.
 
-- Base plugins always included: search, mkdocstrings (Python), mermaid2, termynal
-- Conditional plugins based on detection:
-  - `mkdocs-typer2` if Typer dependency found
-  - `mkdoxy` if C/C++ files found in source/
-  - `gen-files` and `literate-nav` for auto-generated API docs
+**Base plugins (always included):**
+- search
+- mkdocstrings (Python)
+- mermaid2
+- termynal
+
+**Conditional plugins (based on detection):**
+- `mkdocs-typer2`: Typer dependency found
+- `mkdoxy`: C/C++ files found in source/
+- `gen-files` + `literate-nav`: Auto-generated API docs
 
 ## Smart YAML Merge System
 
-A critical feature is the non-destructive mkdocs.yml merging system that preserves user customizations:
+Non-destructive mkdocs.yml merging preserves user customizations.
 
-### How It Works
+```mermaid
+flowchart TD
+    Start([setup on existing project]) --> Exists{mkdocs.yml exists?}
+    Exists -->|Yes| Load[Load existing config]
+    Exists -->|No| Generate[Generate from template]
+    Load --> GenerateNew[Generate new template from features]
+    GenerateNew --> Merge[Smart merge: preserve user values, update template sections]
+    Merge --> Display[Display table of added/updated/preserved settings]
+    Generate --> Done[Write mkdocs.yml]
+    Display --> Done
+```
 
-When `setup` is run on a project that already has mkdocs.yml:
-
-1. **Load existing config**: Parse current user configuration
-2. **Generate new template**: Render fresh template from features
-3. **Smart merge**: Preserve user values while updating template-managed sections
-4. **Display changes**: Show table of added/updated/preserved settings
-
-### What Gets Preserved
-
+**Preserved:**
 - Custom navigation structure
 - Additional plugins beyond template defaults
 - Custom theme features
@@ -262,94 +359,176 @@ When `setup` is run on a project that already has mkdocs.yml:
 - User-added markdown extensions
 - Custom site metadata
 
-### What Gets Updated
-
+**Updated:**
 - Plugin configurations (e.g., mkdocstrings handlers paths)
 - Core plugin list (adds new feature-detected plugins)
 - Template-managed default values
 
-This allows users to customize their docs and safely re-run setup to pick up new features or template improvements.
+Allows users to customize docs and safely re-run setup for new features or template improvements.
 
-## CI/CD Integration
+</implementation_details>
 
-### GitHub Actions
+---
 
-Creates `.github/workflows/pages.yml` with:
+<cicd_integration>
 
-- `actions/checkout@v4` for code checkout
-- `actions/setup-python@v5` for Python 3.11 setup
-- `astral-sh/setup-uv@v4` for uv installation
-- Runs `uv run mkapidocs build . --strict` to build documentation
-- `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4` for GitHub Pages deployment
-- Deploys to GitHub Pages on pushes to main branch only
+## GitHub Actions
 
-### GitLab CI
+Creates `.github/workflows/pages.yml`:
 
-Creates `.gitlab/workflows/pages.gitlab-ci.yml` with a `pages` job:
+```yaml
+# Workflow components (conceptual)
+- actions/checkout@v4                      # Code checkout
+- actions/setup-python@v5                  # Python 3.11 setup
+- astral-sh/setup-uv@v4                    # uv installation
+- uv run mkapidocs build . --strict        # Build documentation
+- actions/upload-pages-artifact@v3         # Upload artifact
+- actions/deploy-pages@v4                  # Deploy to GitHub Pages
+```
 
-- Uses `ghcr.io/astral-sh/uv:python3.11` image
-- Runs `uv run mkapidocs build . --strict`
-- Deploys public/ directory to GitLab Pages
-- Runs only on default branch
+Deploys on pushes to main branch only.
 
-**Note:** Before creating the workflow, `create_gitlab_ci()` checks if `.gitlab-ci.yml` already has a `pages` job. If found, it skips creation and warns the user to update their existing job to use mkapidocs.
+## GitLab CI
 
-## Validation System
+Creates `.gitlab/workflows/pages.gitlab-ci.yml`:
 
-Before setup, the package validates:
+**Job: pages**
+- Image: `ghcr.io/astral-sh/uv:python3.11`
+- Command: `uv run mkapidocs build . --strict`
+- Deploys: `public/` directory to GitLab Pages
+- Trigger: Default branch only
 
-1. **System requirements**: Python version, uv installation, mkdocs availability
-2. **Project requirements**: pyproject.toml exists, has required metadata
-3. **Optional requirements**: Doxygen for C code (offers to install), git for URL detection
+**Pre-Creation Check:**
 
-Validation results displayed in rich tables with pass/fail/warning status.
+```mermaid
+flowchart TD
+    Start([create_gitlab_ci called]) --> Check{.gitlab-ci.yml has pages job?}
+    Check -->|Yes| Skip[Skip creation, warn user to update existing job]
+    Check -->|No| Create[Create .gitlab/workflows/pages.gitlab-ci.yml]
+```
 
-## Error Handling Strategy
+</cicd_integration>
 
-- Validation errors: Display detailed results table, exit before making changes
-- Build/serve errors: Capture subprocess output, display with rich formatting
-- User-facing errors: Use custom MessageType enum (INFO, SUCCESS, WARNING, ERROR) with rich panels
-- Technical errors: Raise CLIError or BuildError with context
+---
 
-## File Generation Pattern
+<validation_system>
 
-All content generation functions follow this pattern:
+## Validation Checks
+
+```mermaid
+flowchart TD
+    Start([setup command]) --> System[Validate system requirements]
+    System --> Project[Validate project requirements]
+    Project --> Optional[Validate optional requirements]
+    Optional --> Results[Display results table with pass/fail/warning status]
+    Results --> Failed{Any failures?}
+    Failed -->|Yes| Exit[Exit before making changes]
+    Failed -->|No| Proceed[Proceed with setup]
+```
+
+**System Requirements:**
+- Python version
+- uv installation
+- mkdocs availability
+
+**Project Requirements:**
+- pyproject.toml exists
+- Required metadata present
+
+**Optional Requirements:**
+- Doxygen for C code (offers to install)
+- git for URL detection
+
+Results displayed in rich tables.
+
+</validation_system>
+
+---
+
+<error_handling>
+
+## Error Strategy
+
+**Validation errors:**
+- Display detailed results table
+- Exit before making changes
+
+**Build/serve errors:**
+- Capture subprocess output
+- Display with rich formatting
+
+**User-facing errors:**
+- Use MessageType enum (INFO, SUCCESS, WARNING, ERROR)
+- Display in rich panels
+
+**Technical errors:**
+- Raise CLIError or BuildError with context
+
+</error_handling>
+
+---
+
+<file_generation>
+
+## Content Generation Pattern
+
+All generation functions follow this pattern:
 
 1. Check if target file/directory exists
 2. Render Jinja2 template with context variables
 3. Write to target project (not this package's directory)
 4. Display success message with rich formatting
 
+</file_generation>
+
+---
+
+<template_modification>
+
 ## Working with Templates
 
-Templates are stored in `packages/mkapidocs/templates/`:
+**Template Locations:**
 
-- **mkdocs.yml.j2**: Jinja2 template for MkDocs configuration
-- **pages.yml**: Static GitHub Actions workflow template
-- **gitlab-ci.yml**: Static GitLab CI workflow template
-- **\*\_template.py**: Python modules with markdown content templates
+`packages/mkapidocs/templates/`
 
-To modify:
+- `mkdocs.yml.j2`: Jinja2 template for MkDocs configuration
+- `pages.yml`: Static GitHub Actions workflow template
+- `gitlab-ci.yml`: Static GitLab CI workflow template
+- `*_template.py`: Python modules with markdown content templates
 
-1. Edit the appropriate template file in `packages/mkapidocs/templates/`
-2. For Jinja2 templates (.j2), template variables come from feature detection in `generator.py`
-3. Test by running `uv run mkapidocs setup` on a sample project
+**Modification Process:**
 
-## Code Quality Standards
+1. Edit appropriate template file in `packages/mkapidocs/templates/`
+2. For Jinja2 templates (.j2): template variables come from feature detection in `generator.py`
+3. Test by running `uv run mkapidocs setup` on sample project
 
-- Python 3.11+ required (uses modern type hints with `|` unions)
-- Google-style docstrings enforced by ruff
-- Type hints required on all functions (mypy strict mode)
-- Line length: 120 characters
-- No suppression of linting errors without fixing root cause
+</template_modification>
 
-## Conventional Commits
+---
 
-This project follows the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) specification for commit messages.
+<code_quality>
 
-### Format
+## Standards
 
-```
+- **Python version**: 3.11+ (uses modern type hints with `|` unions)
+- **Docstrings**: Google-style (enforced by ruff)
+- **Type hints**: Required on all functions (mypy strict mode)
+- **Line length**: 120 characters
+- **Linting suppression**: Prohibited without fixing root cause
+
+</code_quality>
+
+---
+
+<conventional_commits>
+
+## Commit Message Format
+
+Follows [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+
+**Structure:**
+
+```text
 <type>[optional scope]: <description>
 
 [optional body]
@@ -357,43 +536,38 @@ This project follows the [Conventional Commits v1.0.0](https://www.conventionalc
 [optional footer(s)]
 ```
 
-### Core Types (from spec)
+**Core Types (from spec):**
+- **feat**: New functionality (MINOR version bump)
+- **fix**: Bug fixes (PATCH version bump)
 
-- **feat**: introduces new functionality (triggers MINOR version bump in semantic versioning)
-- **fix**: addresses bugs in the codebase (triggers PATCH version bump)
+**Additional Types (allowed):**
+- **docs**: Documentation changes
+- **style**: Code style (formatting, whitespace)
+- **refactor**: Code changes (neither fix bugs nor add features)
+- **perf**: Performance improvements
+- **test**: Adding or correcting tests
+- **build**: Build system or dependency changes
+- **ci**: CI configuration changes
+- **chore**: Other changes (no src or test file modifications)
 
-### Additional Types (allowed but not in core spec)
+**Breaking Changes (MAJOR version bump):**
 
-- **docs**: documentation only changes
-- **style**: code style changes (formatting, whitespace)
-- **refactor**: code changes that neither fix bugs nor add features
-- **perf**: performance improvements
-- **test**: adding or correcting tests
-- **build**: changes to build system or dependencies
-- **ci**: changes to CI configuration
-- **chore**: other changes that don't modify src or test files
-
-### Breaking Changes
-
-Breaking changes trigger MAJOR version bumps and can be indicated in two ways:
-
+Two indication methods:
 1. Add `!` after type/scope: `feat!: change API response format`
-2. Add footer: `BREAKING CHANGE: detailed description of breaking change`
+2. Add footer: `BREAKING CHANGE: detailed description`
 
-### Rules from Specification
-
-- Type is **mandatory** and must be followed by colon and space
-- Description **must immediately follow** the colon and space
-- Description is typically lowercase (not mandated by spec)
-- No period at end of description (convention, not mandated)
-- Body **must begin one blank line after** the description
-- Footer(s) may be provided one blank line after body
+**Rules:**
+- Type is **mandatory**, followed by colon and space
+- Description **must immediately follow** colon and space
+- Description typically lowercase
+- No period at end of description
+- Body **must begin one blank line after** description
+- Footer(s) one blank line after body
 - `BREAKING CHANGE` **must be uppercase** in footer
-- All other elements are case-insensitive
 
-### Examples
+**Examples:**
 
-```
+```text
 feat: add user authentication support
 
 feat(api): add pagination to list endpoints
@@ -407,18 +581,28 @@ refactor!: simplify error handling
 BREAKING CHANGE: error responses now use standardized format
 ```
 
-## Dependencies
+</conventional_commits>
 
-Runtime dependencies are declared in `[project] dependencies` in pyproject.toml:
+---
 
-- typer: CLI framework
-- jinja2: Template rendering
-- tomli-w: TOML writing
-- python-dotenv: Environment variables
-- pydantic: Data validation
-- rich: Terminal formatting
-- httpx: HTTP client for Doxygen downloads
-- pyyaml: YAML parsing/writing
-- mkdocs + plugins: Documentation generation
+<dependencies>
 
-Development dependencies are in `[dependency-groups] dev`.
+## Runtime Dependencies
+
+Declared in `[project] dependencies` in pyproject.toml:
+
+- **typer**: CLI framework
+- **jinja2**: Template rendering
+- **tomli-w**: TOML writing
+- **python-dotenv**: Environment variables
+- **pydantic**: Data validation
+- **rich**: Terminal formatting
+- **httpx**: HTTP client (Doxygen downloads)
+- **pyyaml**: YAML parsing/writing
+- **mkdocs + plugins**: Documentation generation
+
+## Development Dependencies
+
+Declared in `[dependency-groups] dev`.
+
+</dependencies>

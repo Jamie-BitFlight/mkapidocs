@@ -539,6 +539,8 @@ dev = [
     { name = "pytest-mock" },
     { name = "python-semantic-release" },
     { name = "ruff" },
+    { name = "toml-sort" },
+    { name = "uv-sort" },
 ]
 
 [package.metadata]
@@ -573,6 +575,8 @@ dev = [
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "python-semantic-release", specifier = ">=9.0.0" },
     { name = "ruff", specifier = ">=0.14.2" },
+    { name = "toml-sort", specifier = ">=0.24.3" },
+    { name = "uv-sort", specifier = ">=0.7.0" },
 ]
 
 [[package]]
@@ -1306,6 +1310,18 @@ wheels = [
 ]
 
 [[package]]
+name = "toml-sort"
+version = "0.24.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tomlkit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/65/d62fb175769355a65c2c5e53a155cf28f2162af4e4067f11d8af89c0a4a3/toml_sort-0.24.3.tar.gz", hash = "sha256:74c3cab5c1ecaf76c8239addc15342de548fb39598694f1298550d0fe2673a81", size = 17773, upload-time = "2025-09-10T02:43:54.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/1c/f5a9a4f918ff0e1578fdc3f607a7ec704c5da1b13ddc290fd0aefa97ff2e/toml_sort-0.24.3-py3-none-any.whl", hash = "sha256:d70642f54827b4c17a6cde788dcb45d598c1eb9833544a2fcec5eb7b0b744ed4", size = 16538, upload-time = "2025-09-10T02:43:53.67Z" },
+]
+
+[[package]]
 name = "tomli"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1417,6 +1433,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/01/05/00c90367db0c81379c9d2b1fb458a09a0704ecd89821c071cb0d8a917752/uv-0.9.13-py3-none-win32.whl", hash = "sha256:a80296b1feb61bac36aee23ea79be33cd9aa545236d0780fbffaac113a17a090", size = 19607949, upload-time = "2025-11-26T16:17:23.337Z" },
     { url = "https://files.pythonhosted.org/packages/2f/e0/718b433acf811388e309936524be5786b8e0cc8ff23128f9cc29a34c075b/uv-0.9.13-py3-none-win_amd64.whl", hash = "sha256:5732cd0fe09365fa5ad2c0a2d0c007bb152a2aa3c48e79f570eec13fc235d59d", size = 21722341, upload-time = "2025-11-26T16:17:20.764Z" },
     { url = "https://files.pythonhosted.org/packages/9f/31/142457b7c9d5edcdd8d4853c740c397ec83e3688b69d0ef55da60f7ab5b5/uv-0.9.13-py3-none-win_arm64.whl", hash = "sha256:edfc3d53b6adefae766a67672e533d7282431f0deb2570186d1c3dd0d0e3c0a3", size = 20042030, upload-time = "2025-11-26T16:17:18.058Z" },
+]
+
+[[package]]
+name = "uv-sort"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "tomlkit" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/c8/ace6136cf5983822ad69c301e155c84d1876cce48e728731279d195ad26d/uv_sort-0.7.0.tar.gz", hash = "sha256:bce0f840fac8e44a287cba4c9113efc33d6938d0e983984370ad2974f5f8a450", size = 22422, upload-time = "2026-01-07T05:45:46.755Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/53/a1a51c94f671f41d441532ee791c25d22f92df7dc76aac2b0697b558e286/uv_sort-0.7.0-py3-none-any.whl", hash = "sha256:efb88531ac848668b00f3ac53bae49ce8d3712743ef9dcd86f4d3f3dd5cc55b6", size = 6402, upload-time = "2026-01-07T05:45:45.669Z" },
 ]
 
 [[package]]
