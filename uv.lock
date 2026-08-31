@@ -527,7 +527,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "python-semantic-release", specifier = ">=9.0.0" },
-    { name = "ruff", specifier = ">=0.14.2" },
+    { name = "ruff", specifier = "==0.14.7" },
     { name = "toml-sort", specifier = ">=0.24.3" },
     { name = "ty", specifier = ">=0.0.75" },
     { name = "uv-sort", specifier = ">=0.7.0" },

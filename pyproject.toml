@@ -42,7 +42,10 @@ dev = [
     "pytest-mock>=3.14.0",
     "pytest>=8.4.2",
     "python-semantic-release>=9.0.0",
-    "ruff>=0.14.2",
+    # Pinned to the ruff-pre-commit rev so `uv run ruff` and the hook agree.
+    # ruff 0.16 formats Python inside Markdown and stabilises D421/PLW0717/RUF067,
+    # which this repo does not yet satisfy -- see the ruff-0.16 follow-up.
+    "ruff==0.14.7",
     "toml-sort>=0.24.3",
     "ty>=0.0.75",
     "uv-sort>=0.7.0",
