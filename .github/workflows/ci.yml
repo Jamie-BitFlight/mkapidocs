@@ -62,8 +62,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Run ty
-        run: uv run ty check || true
-        continue-on-error: true
+        run: uv run ty check
 
   release:
     name: Semantic Release

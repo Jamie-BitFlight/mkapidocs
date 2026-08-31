@@ -15,7 +15,6 @@ import pytest
 from mkapidocs.models import PyprojectConfig, TomlTable
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
     from types import ModuleType
 
     from pytest_mock import MockerFixture
@@ -173,9 +172,7 @@ build-backend = "hatchling.build"
 
 
 @pytest.fixture
-def mock_git_repo(
-    mock_repo_path: Path, mocker: MockerFixture
-) -> Generator[Path, None, None]:
+def mock_git_repo(mock_repo_path: Path, mocker: MockerFixture) -> Path:
     """Mock a git repository with remote URL.
 
     Tests: Git remote URL detection
@@ -186,7 +183,7 @@ def mock_git_repo(
         mock_repo_path: Path to mock repository
         mocker: pytest-mock fixture for mocking
 
-    Yields:
+    Returns:
         Path to mock repository with mocked git operations
     """
     # Mock git remote get-url origin
