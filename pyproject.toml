@@ -37,8 +37,6 @@ build-backend = "hatchling.build"
 dev = [
     "generate-changelog>=0.16.0",
     "hatchling>=1.28.0",
-    "mypy>=1.18.2",
-    "pep723-loader>=0.6.0",
     "prek>=0.2.19",
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.14.0",
@@ -46,6 +44,7 @@ dev = [
     "python-semantic-release>=9.0.0",
     "ruff>=0.14.2",
     "toml-sort>=0.24.3",
+    "ty>=0.0.75",
     "uv-sort>=0.7.0",
 ]
 
@@ -175,35 +174,14 @@ max-line-length = 120
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.mypy]
-disable_error_code = ["call-arg", "misc"]
-extra_checks = true
-ignore_missing_imports = true
-mypy_path = ["packages", "."]
-pretty = true
-python_version = "3.11"
-show_error_codes = true
-strict = true
-warn_redundant_casts = true
-warn_unused_configs = true
-warn_unused_ignores = true
+[tool.ty.src]
+include = ["packages", "tests"]
 
-[[tool.mypy.overrides]]
-disable_error_code = [
-    "attr-defined",
-    "call-arg",
-    "var-annotated",
-    "valid-type",
-    "no-any-return",
-    "index",
-]
-module = [
-    "test.*",
-    "tests.*",
-    ".claude.*",
-    ".claude.utilities.*",
-    "find-temp-documentation.*",
-]
+# Type checking: Astral ty only (`[tool.ty.*]`, `uv run ty check`, CI + pre-commit).
+# Mypy and Pyright/basedpyright overlap ty; we disable them here so IDEs and one-off CLI runs
+# do not second-guess ty or force duplicate config and edge-case handling.
+[tool.mypy]
+exclude = [".*"]
 
 [tool.basedpyright]
 typeCheckingMode = "off"

@@ -77,7 +77,7 @@
 - `pyproject.toml` - PEP 518/517/621 compliant configuration containing:
   - Build system: hatchling with hatch-vcs
   - Dependencies: runtime and dev groups
-  - Tool configurations: ruff, mypy, pytest, semantic-release
+  - Tool configurations: ruff, ty, pytest, semantic-release
 - `hatch.toml`-style config embedded in pyproject.toml with `[tool.hatch.version]` using VCS source
 
 **Code Quality:**
@@ -103,7 +103,7 @@
 - Per-file ignores for tests (relaxed security, docstring, type annotation requirements)
 
 **Type Checking:**
-- mypy 1.18.2+ - Strict mode enabled (`strict = true`)
+- ty 0.0.75+ - Astral type checker
 - Type hints required on all functions
 
 ## Testing
@@ -128,7 +128,7 @@ uv run pytest --cov=packages/mkapidocs --cov-report=html  # HTML coverage report
 **Platform:** GitHub Actions (`.github/workflows/`)
 - **ci.yml**: Test on all commits, lint, semantic-release, pages deployment
   - Test: Python 3.11, pytest with coverage upload to Codecov
-  - Lint: ruff, mypy (continue-on-error)
+  - Lint: ruff, ty (continue-on-error)
   - Release: python-semantic-release on main branch pushes only
   - Pages: Deploy generated documentation to GitHub Pages
 

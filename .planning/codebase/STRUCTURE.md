@@ -89,7 +89,7 @@ mkapidocs/
 - `pyproject.toml`: Package metadata, dependencies, tool configs
 - `mkdocs.yml`: This project's MkDocs configuration
 - `pyproject.toml [tool.ruff]`: Linting/formatting config
-- `pyproject.toml [tool.mypy]`: Type checking config
+- `pyproject.toml [tool.ty.src]`: Type checking config
 
 **Core Logic:**
 - `packages/mkapidocs/generator.py`: setup_documentation(), file creation functions

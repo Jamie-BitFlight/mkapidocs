@@ -35,7 +35,7 @@ uv run pytest -k "test_pattern" -v                     # Tests matching pattern
 ```bash
 uv run ruff check packages/mkapidocs/     # Lint (auto-fixes enabled)
 uv run ruff format packages/mkapidocs/    # Format
-uv run mypy packages/mkapidocs/           # Type check (strict mode)
+uv run ty check                           # Type check
 ```
 
 ### Documentation
@@ -107,7 +107,7 @@ Override with `--provider github|gitlab`.
 - **Python**: >=3.11,<3.13 — uses modern syntax (`str | None`, `dict[str, Any]`)
 - **Line length**: 120 characters
 - **Docstrings**: Google-style, enforced by ruff
-- **Type hints**: Required on all functions (mypy strict mode)
+- **Type hints**: Required on all functions (checked by ty)
 - **Quotes**: Double quotes
 - **Build system**: hatchling with hatch-vcs (version from git tags)
 
@@ -147,4 +147,4 @@ Runtime dependencies (pyproject.toml):
 - **HTTP/YAML**: httpx, ruamel.yaml
 - **Docs**: mkdocs, mkdocs-material, mkdocstrings[python], mkdocs-typer2, mkdoxy, mkdocs-literate-nav, mkdocs-mermaid2-plugin, termynal
 
-Dev dependencies in `[dependency-groups] dev`: mypy, pytest, pytest-cov, pytest-mock, ruff, python-semantic-release.
+Dev dependencies in `[dependency-groups] dev`: ty, pytest, pytest-cov, pytest-mock, ruff, python-semantic-release.
