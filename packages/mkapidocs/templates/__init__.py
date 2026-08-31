@@ -1,4 +1,5 @@
 """Template module exports."""
+from __future__ import annotations
 
 from importlib.resources import files
 

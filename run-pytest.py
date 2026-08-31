@@ -27,6 +27,7 @@ Usage:
     ./run-pytest.py tests/test_feature_detection.py  # Run specific test file
     ./run-pytest.py --cov        # Run with coverage report
 """
+from __future__ import annotations
 
 import sys
 

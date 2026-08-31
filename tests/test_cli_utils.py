@@ -1,5 +1,6 @@
 """Tests for CLI utility functions."""
 # pyright: reportPrivateUsage=false
+from __future__ import annotations
 
 from pathlib import Path
 
