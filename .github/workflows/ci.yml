@@ -65,10 +65,6 @@ jobs:
         run: uv run mypy . || true
         continue-on-error: true
 
-      - name: Run basedpyright
-        run: uv run basedpyright . || true
-        continue-on-error: true
-
   release:
     name: Semantic Release
     runs-on: ubuntu-latest

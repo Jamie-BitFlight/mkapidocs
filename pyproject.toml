@@ -35,7 +35,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.21.1",
     "generate-changelog>=0.16.0",
     "hatchling>=1.28.0",
     "mypy>=1.18.2",
@@ -207,16 +206,8 @@ module = [
 ]
 
 [tool.basedpyright]
-extraPaths = ["**/packages", "**/tests"]
-ignore = ["**/typings", "**/tests"]
-include = ["**/packages"]
-pythonVersion = "3.11"
-reportImplicitRelativeImport = false
-reportMissingImports = false
-reportMissingTypeStubs = false
-reportPrivateImportUsage = false
-reportUnnecessaryTypeIgnoreComment = "error"
-typeCheckingMode = "basic"
+typeCheckingMode = "off"
+
 
 [tool.semantic_release]
 branch = "main"

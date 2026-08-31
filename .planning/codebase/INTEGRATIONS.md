@@ -83,7 +83,7 @@
 **CI Pipeline:**
 - GitHub Actions (`.github/workflows/ci.yml`)
   - Test stage: Runs pytest, uploads coverage to Codecov
-  - Lint stage: Runs ruff, mypy, basedpyright
+  - Lint stage: Runs ruff, mypy
   - Release stage: Runs python-semantic-release, publishes to GitHub Releases
   - Pages stage: Builds and deploys documentation to GitHub Pages
 

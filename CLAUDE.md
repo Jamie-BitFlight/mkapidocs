@@ -36,7 +36,6 @@ uv run pytest -k "test_pattern" -v                     # Tests matching pattern
 uv run ruff check packages/mkapidocs/     # Lint (auto-fixes enabled)
 uv run ruff format packages/mkapidocs/    # Format
 uv run mypy packages/mkapidocs/           # Type check (strict mode)
-uv run basedpyright packages/mkapidocs/   # Type check (basic mode)
 ```
 
 ### Documentation
@@ -148,4 +147,4 @@ Runtime dependencies (pyproject.toml):
 - **HTTP/YAML**: httpx, ruamel.yaml
 - **Docs**: mkdocs, mkdocs-material, mkdocstrings[python], mkdocs-typer2, mkdoxy, mkdocs-literate-nav, mkdocs-mermaid2-plugin, termynal
 
-Dev dependencies in `[dependency-groups] dev`: mypy, basedpyright, pytest, pytest-cov, pytest-mock, ruff, python-semantic-release.
+Dev dependencies in `[dependency-groups] dev`: mypy, pytest, pytest-cov, pytest-mock, ruff, python-semantic-release.

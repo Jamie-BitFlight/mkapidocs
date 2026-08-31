@@ -37,7 +37,7 @@
 **Linting:**
 - Tool: `ruff check` with extensive rule set (preview mode enabled)
 - Mode: Strict (auto-fixes enabled: `fix = true`, `unsafe-fixes = true`)
-- Type checking: `mypy` in strict mode + `basedpyright` basic mode
+- Type checking: `mypy` in strict mode
 - Max complexity: 12 (McCabe)
 
 **Key rules enforced:**
