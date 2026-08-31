@@ -288,7 +288,7 @@ Execute each wave in sequence. Autonomous plans within a wave run in parallel **
    ```
 
    **If `PARALLELIZATION=true` (default):** Use Task tool with multiple parallel calls.
-   
+
    **If `PARALLELIZATION=false`:** Spawn agents one at a time, waiting for each to complete before starting the next. This ensures no concurrent file modifications or build operations.
 
    Each agent gets prompt with inlined content:

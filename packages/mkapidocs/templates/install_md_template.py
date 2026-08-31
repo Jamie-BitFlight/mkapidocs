@@ -1,4 +1,5 @@
 """Installation guide template."""
+
 from __future__ import annotations
 
 INSTALL_MD_TEMPLATE = """# Installation

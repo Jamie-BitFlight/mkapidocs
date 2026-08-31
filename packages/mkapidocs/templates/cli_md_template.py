@@ -1,4 +1,5 @@
 """Template for CLI reference documentation."""
+
 from __future__ import annotations
 
 CLI_MD_TEMPLATE = """# CLI Reference

@@ -1,4 +1,5 @@
 """Template for Python API reference documentation."""
+
 from __future__ import annotations
 
 PYTHON_API_MD_TEMPLATE = """# Python API Reference
